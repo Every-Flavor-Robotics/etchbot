@@ -28,13 +28,13 @@ struct TrapezoidTrajectoryParameters
 struct TrapezoidVelocityTrajectory
 {
   // Start time of the profile
-  long start_time_us = 0;
+  unsigned long start_time_us = 0;
   //   Time from start for constant acceleration
-  long acceleration_time_delta_us;
+  unsigned long acceleration_time_delta_us;
   //   Time from start for constant velocity
-  long coast_end_time_delta_us;
+  unsigned long coast_end_time_delta_us;
   //   Time from start for constant deceleration
-  long end_time_delta_us;
+  unsigned long end_time_delta_us;
 
   float angle;
   float v_initial;
@@ -55,7 +55,7 @@ TrapezoidVelocityTrajectory generate_trapezoid_profile(
     TrapezoidTrajectoryParameters args);
 
 TrajectoryState compute_trapezoid_velocity_vector(
-    TrapezoidVelocityTrajectory& profile, long time_us);
+    TrapezoidVelocityTrajectory& profile, unsigned long time_us);
 
 }  // namespace Planner
 #endif  // PLANNER_H

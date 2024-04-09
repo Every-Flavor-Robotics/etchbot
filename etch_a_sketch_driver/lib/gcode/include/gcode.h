@@ -62,18 +62,21 @@ class GCodeParser
 {
  public:
   // Constructor (you might want to initialize variables here)
-  GCodeParser(GCodeStream *stream, int buffer_size = 10);
+  GCodeParser(GCodeStream *stream, size_t max_buffer_size = 10,
+              float rapid_feedrate = 5000.0f);
 
   void init();
 
   // Primary parsing function
   void parse_line(String line);
   String get_next_gcode_line();
+  void loop();
   bool is_complete();
   bool is_stream_complete();
   bool is_available();
 
-  int buffer_size;
+  size_t buffer_size;
+  size_t max_buffer_size;
 
   int get_command_buffer_size();
   void push_command_buffer(const MotionCommand &command);

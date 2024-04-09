@@ -22,6 +22,8 @@ class GCodeStream
 
   virtual bool is_complete() = 0;
 
+  virtual void loop() = 0;
+
   // Read a line from the stream
   virtual String read_line() = 0;
 };

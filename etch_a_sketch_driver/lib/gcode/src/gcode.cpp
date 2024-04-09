@@ -4,14 +4,16 @@
 
 #include <chrono>
 
-GCode::GCodeParser::GCodeParser(GCodeStream* stream, int buffer_size)
-    : buffer_size(buffer_size),
+GCode::GCodeParser::GCodeParser(GCodeStream* stream, size_t max_buffer_size,
+                                float rapid_feedrate)
+    : buffer_size(max_buffer_size),
+      max_buffer_size(max_buffer_size),
       current_x(0.0),
       current_y(0.0),
       current_z(0.0),
       absolute_mode(true),
       feedrate(0.0),
-      rapid_feedrate(0.0),
+      rapid_feedrate(rapid_feedrate),
       stream(stream)
 {
   lock_command_buffer.store(false);
@@ -48,9 +50,12 @@ void GCode::GCodeParser::parse_line(String line)
     {
       case 0:
         process_g0_g1(line, GCode::G0G1Mode::G0);
+        // Serial.println("Running G0");
         break;
       case 1:
         process_g0_g1(line, GCode::G0G1Mode::G1);
+        // Serial.println("Running G1");
+
         break;
       case 2:  // Falls through to G3
       case 3:
@@ -59,12 +64,18 @@ void GCode::GCodeParser::parse_line(String line)
         break;
       case 28:
         process_g28(line);
+        // Serial.println("Running G28");
+
         break;
       case 90:
         process_g90_g91(line, GCode::G90G91Mode::G90);
+        // Serial.println("Running G90");
+
         break;
       case 91:
         process_g90_g91(line, GCode::G90G91Mode::G91);
+        // Serial.println("Running G91");
+
         break;
       default:
         //   For now, let's ignore unknown G-codes
@@ -209,16 +220,16 @@ std::vector<GCode::GCodeParameter> GCode::GCodeParser::extract_parameters(
 }
 
 float GCode::GCodeParser::get_feedrate() { return feedrate; }
-float GCode::GCodeParser::get_rapid_feedrate() { return feedrate; }
+float GCode::GCodeParser::get_rapid_feedrate() { return rapid_feedrate; }
 
 void GCode::parser_thread(GCode::GCodeParser& parser)
 {
   while (!parser.is_stream_complete())
   {
     // Print some debug information
-    Serial.println(
-        "Current buffer size: " + String(parser.get_command_buffer_size()) +
-        " / " + String(parser.buffer_size));
+    // Serial.println(
+    //     "Current buffer size: " + String(parser.get_command_buffer_size()) +
+    //     " / " + String(parser.buffer_size));
     if (parser.get_command_buffer_size() < parser.buffer_size)
     {
       // Get a line of GCode (from where? This part is up to you)
@@ -232,6 +243,8 @@ void GCode::parser_thread(GCode::GCodeParser& parser)
       // Brief pause if buffer is full
       vTaskDelay(2);
     }
+
+    parser.loop();
 
     // Reset the watchdog timer
     esp_task_wdt_reset();
@@ -262,6 +275,8 @@ void GCode::GCodeParser::init()
 }
 
 String GCode::GCodeParser::get_next_gcode_line() { return stream->read_line(); }
+
+void GCode::GCodeParser::loop() { stream->loop(); }
 
 void GCode::GCodeParser::set_feedrate(float feedrate)
 {
