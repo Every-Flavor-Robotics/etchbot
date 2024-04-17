@@ -39,8 +39,13 @@ class Svg2GcodeGenerator(GCodeGenerator):
 
     SVG2GCODE_PATH = "~/efr/svg2gcode/Cargo.toml"
 
-
-    def __init__(self, feed_rate: int = 500, output_width: float = 15, output_height = 10.3125, circular_interpolation: bool = False):
+    def __init__(
+        self,
+        feed_rate: int = 8000,
+        output_width: float = 130,
+        output_height=89.375,
+        circular_interpolation: bool = False,
+    ):
         """Initialize the Svg2gcodeGenerator with the feed rate and seek rate.
 
         Args:
