@@ -10,6 +10,12 @@ struct VelocityVector
   float y;
 };
 
+struct AccelerationVector
+{
+  float x;
+  float y;
+};
+
 // Define a struct to hold the parameters of a trapezoidal profile
 // These are the constraints used to plan the trajectory
 struct TrapezoidTrajectoryParameters
@@ -48,11 +54,12 @@ struct TrapezoidVelocityTrajectory
 struct TrajectoryState
 {
   VelocityVector v;
+  AccelerationVector a;
   bool is_complete = false;
 };
 
 TrapezoidVelocityTrajectory generate_trapezoid_profile(
-    TrapezoidTrajectoryParameters args);
+    TrapezoidTrajectoryParameters args, float error_tolerance);
 
 TrajectoryState compute_trapezoid_velocity_vector(
     TrapezoidVelocityTrajectory& profile, unsigned long time_us);
