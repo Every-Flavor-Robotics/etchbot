@@ -5,7 +5,7 @@ import click
 from image_preprocessors import (
     ColorbookPreprocessor,
     AspectRatioPreprocessor,
-    CoherentLineDrawingPreproccessor,
+    CoherentLineDrawingPreprocessor,
 )
 from vectorizers import PotraceVectorizer
 from gcode_generators import Svg2GcodeGenerator
@@ -27,7 +27,7 @@ def run_pipeline(
     # Create the strategies for each of the steps
     preprocessors = [
         AspectRatioPreprocessor(16 / 11),
-        CoherentLineDrawingPreproccessor(
+        CoherentLineDrawingPreprocessor(
             etf_kernel=5, sigma_c=0.361, sigma_m=4.0, tau=0.9, rho=0.997
         ),
     ]
