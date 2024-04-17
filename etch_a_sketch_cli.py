@@ -1,12 +1,22 @@
 import pathlib
-
+import shutil
 import click
 
-from image_preprocessors import ColorbookPreprocessor, AspectRatioPreprocessor
+from image_preprocessors import (
+    ColorbookPreprocessor,
+    AspectRatioPreprocessor,
+    CoherentLineDrawingPreproccessor,
+)
 from vectorizers import PotraceVectorizer
 from gcode_generators import Svg2GcodeGenerator
+from gcode_filters import ResolutionReducer, ColinearFilter
 
-def run_pipeline(input_file: pathlib.Path, output_dir: pathlib.Path):
+
+def run_pipeline(
+    input_file: pathlib.Path,
+    output_dir: pathlib.Path,
+    copy: bool = False,
+):
     # Print in green, processing the input file
     click.secho(f"Processing {input_file}...", fg="green")
 
@@ -15,48 +25,87 @@ def run_pipeline(input_file: pathlib.Path, output_dir: pathlib.Path):
         output_dir.mkdir()
 
     # Create the strategies for each of the steps
-    preprocessors = [AspectRatioPreprocessor(16/11), ColorbookPreprocessor()]
+    preprocessors = [
+        AspectRatioPreprocessor(16 / 11),
+        CoherentLineDrawingPreproccessor(
+            etf_kernel=5, sigma_c=0.361, sigma_m=4.0, tau=0.9, rho=0.997
+        ),
+    ]
     vectorizers = [PotraceVectorizer()]
     gcode_converters = [Svg2GcodeGenerator()]
+    gcode_filters = [ResolutionReducer(2), ColinearFilter(0.996)]
 
     # Confirm that the input file exists
     if not input_file.exists():
         raise FileNotFoundError(f"Input file {input_file} not found.")
 
-    # Copy to the output directory
-    input_file = input_file.resolve()
-    new_input_file = output_dir / input_file.name
-    input_file.rename(new_input_file)
-    input_file = new_input_file
+    # If copy is True, copy the input file to the output directory
+    # otherwise, move the input file to the output directory
+    if copy:
+        input_file = input_file.resolve()
+        new_input_file = output_dir / input_file.name
+        shutil.copy(input_file, new_input_file)
+        input_file = new_input_file
+    else:
+        input_file = input_file.resolve()
+        new_input_file = output_dir / input_file.name
+        input_file.rename(new_input_file)
+        input_file = new_input_file
 
+    # Only run preprocessor if input file is an image
+    if not input_file.suffix in [".jpg", ".jpeg", ".png"]:
+        # Print in red, skipping pre-processing
+        click.secho(f"Skipping pre-processing...", fg="red")
+    else:
+        click.secho(f"Pre-Processing...", fg="green")
 
-    click.secho(f"Pre-Processing...", fg="green")
+        # Process the input file
+        for preprocessor in preprocessors:
+            preprocessor.process(input_file, output_dir / "preprocessed.png")
+            input_file = output_dir / "preprocessed.png"
 
-    # Process the input file
-    for preprocessor in preprocessors:
-        preprocessor.process(input_file, output_dir / "preprocessed.png")
-        input_file = output_dir / "preprocessed.png"
+        # Print in green, processing complete
+        click.secho(f"Pre-Processing complete!", fg="green")
+    if not input_file.suffix in [".jpg", ".jpeg", ".png"]:
+        # Print in red, skipping pre-processing
+        click.secho(f"Skipping Vectorizing...", fg="red")
+    else:
+        click.secho(f"Vectorizing...", fg="green")
 
-    # Print in green, processing complete
-    click.secho(f"Pre-Processing complete!", fg="green")
+        for vectorizer in vectorizers:
+            # Process the preprocessed image
+            vectorizer.process(input_file, output_dir / "vectorized.svg")
+            input_file = output_dir / "vectorized.svg"
 
-    click.secho(f"Vectorizing...", fg="green")
+        # Print in green, processing complete
+        click.secho(f"Vectorizing complete!", fg="green")
 
-    for vectorizer in vectorizers:
-        # Process the preprocessed image
-        vectorizer.process(input_file, output_dir / "vectorized.svg")
-        input_file = output_dir / "vectorized.svg"
+    if not input_file.suffix in [".svg"]:
+        # Print in red, skipping pre-processing
+        click.secho(f"Skipping g-code conversion...", fg="red")
+    else:
+        # Convert to G-code
+        click.secho(f"Converting to G-code...", fg="green")
+        for gcode_converter in gcode_converters:
+            gcode_converter.process(input_file, output_dir / "output.gcode")
 
-    # Print in green, processing complete
-    click.secho(f"Vectorizing complete!", fg="green")
+            input_file = output_dir / "output.gcode"
 
-    # Convert to G-code
-    click.secho(f"Converting to G-code...", fg="green")
-    for gcode_converter in gcode_converters:
-        gcode_converter.process(input_file, output_dir / "output.gcode")
+        # Print in green, processing complete
+        click.secho(f"Converting to G-code complete!", fg="green")
 
-    return output_dir / "output.gcode"
+    if not input_file.suffix in [".gcode"]:
+        # Print in red, skipping pre-processing
+        click.secho(f"Skipping G-code filtering...", fg="red")
+    else:
+        # Filter the G-code
+        click.secho(f"Filtering G-code...", fg="green")
+        for gcode_filter in gcode_filters:
+            gcode_filter.process(input_file, output_dir / "filtered.gcode")
 
+            input_file = output_dir / "filtered.gcode"
+
+    return input_file
 
 
 @click.command()
@@ -74,9 +123,14 @@ def run_pipeline(input_file: pathlib.Path, output_dir: pathlib.Path):
     required=True,
     type=click.Path(file_okay=False, path_type=pathlib.Path),
 )
-def main(input_file: click.Path, output_dir: click.Path):
-    run_pipeline(input_file, output_dir)
-
+@click.option(
+    "--copy",
+    "-c",
+    help="Copy the input file to the output directory",
+    is_flag=True,
+)
+def main(input_file: pathlib.Path, output_dir: pathlib.Path, copy: bool):
+    run_pipeline(input_file, output_dir, copy)
 
 
 if __name__ == "__main__":
