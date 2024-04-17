@@ -69,7 +69,7 @@ class PotraceVectorizer(Vectorizer):
         bm = Bitmap(np.array(image_array))
 
         # Vectorize the image
-        path = bm.trace()
+        path = bm.trace(turdsize=30, alphamax=2, opttolerance=5)
 
         # Create the output file
         with open(output_path, "w") as f:
