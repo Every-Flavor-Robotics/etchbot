@@ -3,8 +3,11 @@ import socket
 host = ""  # Listen on all interfaces
 port = 5000
 
+gcode_drawing = "../gcode-optimizer/test.gcode"
+gcode_calibration = "test_circle.gcode"
+
 # Read in G-code file test/final.gcode
-with open("../gcode-optimizer/test.gcode") as f:
+with open(gcode_drawing) as f:
     gcode_lines = f.readlines()
     gcode_lines.append("G28\n")
 
