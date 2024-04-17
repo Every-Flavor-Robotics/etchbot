@@ -12,11 +12,13 @@ Planner::TrapezoidVelocityTrajectory Planner::generate_trapezoid_profile(
   float dy = args.y_final - args.y_initial;
   float d_total = sqrt(dx * dx + dy * dy);
 
+  //   Construct profile
+  Planner::TrapezoidVelocityTrajectory profile;
+
   //   Serial.println("Distance: " + String(d_total, 5) + "rad");
 
   if (d_total < error_tolerance)
   {
-    Serial.println("Distance is too short to move");
     return Planner::TrapezoidVelocityTrajectory();
   }
 
@@ -27,6 +29,15 @@ Planner::TrapezoidVelocityTrajectory Planner::generate_trapezoid_profile(
   {
     args.v_initial = args.v_target;
   }
+
+  profile.angle = atan2(dy, dx);
+
+  // Velocity mutliplier to ensure that at least one of the components
+  // is travelling at the target velocity
+  // Other component will be traveling at a lower velocity
+  //   float velocity_multipler =
+  //       1;  // / max(cos(profile.angle), sin(profile.angle));
+  //   args.v_target *= velocity_multipler;
 
   // If we are too close to the goal and initial velocity is too high,
   // we only need to decelerate
@@ -90,8 +101,6 @@ Planner::TrapezoidVelocityTrajectory Planner::generate_trapezoid_profile(
                 args.a_target;
     }
 
-    Planner::TrapezoidVelocityTrajectory profile;
-
     //   Compute the time to reach the target velocity
     // v_f = v_i + a * t
     t_accel = (args.v_target - args.v_initial) / args.a_target;
@@ -99,9 +108,6 @@ Planner::TrapezoidVelocityTrajectory Planner::generate_trapezoid_profile(
 
     t_coast = (d_total - d_accel - d_decel) / args.v_target;
   }
-
-  //   Construct profile
-  Planner::TrapezoidVelocityTrajectory profile;
 
   profile.acceleration_time_delta_us = (t_accel * 1e6);
   profile.coast_end_time_delta_us =
@@ -113,8 +119,6 @@ Planner::TrapezoidVelocityTrajectory Planner::generate_trapezoid_profile(
   profile.v_final = args.v_final;
 
   profile.a_target = args.a_target;
-
-  profile.angle = atan2(dy, dx);
 
   //   Serial.println("-------------- In planner -----------------");
   //   Serial.println("Initial position: (" + String(args.x_initial, 5) + ", " +
