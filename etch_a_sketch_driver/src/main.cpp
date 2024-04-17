@@ -38,19 +38,20 @@ typedef union
 #define ACCELERATION 10000
 #define MAX_ACCELERATION 20000
 // mm * RAD_PER_MM = rad
-#define ERROR_TOLERANCE 0.7 * RAD_PER_MM
+#define ERROR_TOLERANCE 1.0 * RAD_PER_MM
 
 // Rad/s
 // #define OL_VELOCITY_LIMIT 15
 float OL_VELOCITY_LIMIT = 0;
-size_t replan_horizon = 2;
+size_t replan_horizon = 1;
+2
 
 // float FEEDRATE = 8000;
 
 #define X_LIM 130
 #define Y_LIM 89.375
 
-TaskHandle_t loop_foc_task;
+    TaskHandle_t loop_foc_task;
 TickType_t xLastWakeTime;
 void loop_foc(void* pvParameters);
 MotorGo::MotorGoMini motorgo_mini;
@@ -267,21 +268,25 @@ void setup()
   // Setup motor parameters
   config_ch0.motor_config = motor_config;
   config_ch0.power_supply_voltage = 17.0;
-  config_ch0.reversed = true;
+  config_ch0.reversed = false;
 
   config_ch1.motor_config = motor_config;
   config_ch1.power_supply_voltage = 17.0;
-  config_ch1.reversed = true;
+  config_ch1.reversed = false;
 
-  left_right_velocity_pid_params.p = 0.04;
-  left_right_velocity_pid_params.i = 0.001;
+  left_right_velocity_pid_params.p = 0.25;
+  left_right_velocity_pid_params.i = 0.00;
   left_right_velocity_pid_params.d = 0.0;
-  left_right_velocity_pid_params.lpf_time_constant = 0.007;
+  left_right_velocity_pid_params.lpf_time_constant = 0.00;
+  left_right_ff_accel_gain = 0.07 / 100;
+  left_right_ff_velocity_gain = 0.03;
 
-  up_down_velocity_pid_params.p = 0.04;
-  up_down_velocity_pid_params.i = 0.001;
+  up_down_velocity_pid_params.p = 0.255;
+  up_down_velocity_pid_params.i = 0.00;
   up_down_velocity_pid_params.d = 0.0;
-  up_down_velocity_pid_params.lpf_time_constant = 0.007;
+  up_down_velocity_pid_params.lpf_time_constant = 0.00;
+  up_down_ff_accel_gain = 0.07 / 100;
+  up_down_ff_velocity_gain = 0.03;
 
   planner_lpf_params.lpf_time_constant = 0.0005;
 
@@ -346,13 +351,13 @@ void setup()
   left_right.set_control_mode(MotorGo::ControlMode::VelocityOpenLoop);
   up_down.set_control_mode(MotorGo::ControlMode::VelocityOpenLoop);
 
-  pid_manager.init(WIFI_SSID, WIFI_PASSWORD);
+  pid_manager.init("NotARobot", "M1crowave!");
 
   // Start the WebSocket server
   //   webSocket.begin();
   //   webSocket.onEvent(webSocketEvent);
 
-  stream = new GCode::WifiGCodeStream("192.168.0.15", 500);
+  stream = new GCode::WifiGCodeStream("192.168.0.15", 100);
   parser = new GCode::GCodeParser(stream, 1000);
 
   GCode::start_parser(*parser);
