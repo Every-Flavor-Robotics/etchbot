@@ -32,6 +32,7 @@ class ImagePreprocessor(ABC):
         # Print class name and "Running..." in green
         secho(f"\tRunning {self.__class__.__name__}...", fg="green")
 
+
 class AspectRatioPreprocessor(ImagePreprocessor):
     """Aspect Ratio Preprocessor crops the input image to a specified size."""
 
@@ -44,7 +45,6 @@ class AspectRatioPreprocessor(ImagePreprocessor):
         """
         self.aspect_ratio = aspect_ratio
         self.resize = resize
-
 
     def process(self, image_path: Path, output_path: Path) -> None:
         """Process the input image and return the output image.
@@ -81,7 +81,6 @@ class AspectRatioPreprocessor(ImagePreprocessor):
                 f"Output image {output_path} not generated correctly."
             )
 
-
     def compute_new_dimensions(self, width: int, height: int) -> tuple[int, int]:
         """Compute the new dimensions of the image after cropping."""
 
@@ -92,7 +91,7 @@ class AspectRatioPreprocessor(ImagePreprocessor):
         return new_width, new_height
 
     def crop_center(self, img: Image) -> Image:
-        """ Crop the center of the image to the specified aspect ratio."""
+        """Crop the center of the image to the specified aspect ratio."""
 
         # Get the dimensions of the image
         width, height = img.size
@@ -120,7 +119,6 @@ class AspectRatioPreprocessor(ImagePreprocessor):
         # Compute the new dimensions
         new_width, new_height = self.compute_new_dimensions(width, height)
 
-
         # Resize the image
         img = img.resize((new_width, new_height), Image.ANTIALIAS)
 
@@ -142,7 +140,6 @@ class ColorbookPreprocessor(ImagePreprocessor):
             Path: Path to the processed image, ready for the next step in the pipeline
         """
         super().process(image_path, output_path)
-
 
         # Confirm that the input image exists
         if not image_path.exists():
@@ -174,3 +171,98 @@ class ColorbookPreprocessor(ImagePreprocessor):
 
         # Remove the temp directory
         subprocess.run(f"rm -r {output_temp_dir}", check=True, shell=True)
+
+
+class CoherentLineDrawingPreprocessor(ImagePreprocessor):
+    """This preprocessor generates a line drawing using the algorithm proposed in "Coherent Line Drawing" (Kang et al)
+
+    Code at: https://github.com/SSARCandy/Coherent-Line-Drawing
+    """
+
+    COHERENT_LINE_DRAWING_PATH = "~/efr/Coherent-Line-Drawing/build/cld"
+
+    def __init__(
+        self,
+        etf_kernel: int = 5,
+        sigma_c: float = 0.361,
+        sigma_m: float = 4.0,
+        tau: float = 0.9,
+        rho: float = 0.997,
+        etf_iterations: int = 1,
+        cld_iterations: int = 1,
+    ):
+        """Initialize the Coherent Line Drawing Preprocessor with the parameters.
+
+        Args:
+            etf_kernel (int): Size of the edge tangent flow kernel
+            sigma_c (float): Line width
+            sigma_m (float): Degree of coherence
+            tau (float): Thresholding
+            rho (float): Noise
+        """
+
+        self.etf_kernel = etf_kernel
+        self.sigma_c = sigma_c
+        self.sigma_m = sigma_m
+        self.tau = tau
+        self.rho = rho
+        self.etf_iterations = etf_iterations
+        self.cld_iterations = cld_iterations
+
+    def construct_args(self, args: dict) -> str:
+        """Construct the arguments for the Coherent Line Drawing preprocessor.
+
+        Args:
+            args (dict): Dictionary of arguments for the preprocessor
+
+        Returns:
+            str: Arguments for the preprocessor in the correct format
+        """
+
+        args_str = " ".join([f"{key} {value}" for key, value in args.items()])
+
+        return args_str
+
+    def process(self, image_path: Path, output_path: Path) -> None:
+        """Process the input image and return the output image.
+
+        Args:
+            image_path (Path): Path to the raw image to be processed
+            output_path (Path): Path to save the processed image
+
+        Returns: None
+        """
+
+        super().process(image_path, output_path)
+
+        # Construct args
+        args = {
+            "--ETF_kernel": self.etf_kernel,
+            "--sigma_c": self.sigma_c,
+            "--sigma_m": self.sigma_m,
+            "--tau": self.tau,
+            "--rho": self.rho,
+            "--ETF_iter": self.etf_iterations,
+            "--CLD_iter": self.cld_iterations,
+            "--output": output_path,
+            "--src": image_path,
+        }
+
+        # Construct the command to run the Coherent Line Drawing preprocessor
+        command = f"{self.COHERENT_LINE_DRAWING_PATH} {self.construct_args(args)}"
+
+        # Run the command
+        try:
+            subprocess.run(command, check=True, shell=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Preprocessor execution failed: {e}") from e
+
+        # Confirm that the output image exists
+        if not output_path.exists():
+            raise FileNotFoundError(
+                f"Output image {output_path} not generated correctly."
+            )
+
+        # Open the image and convert to grayscale
+        image = Image.open(output_path).convert("L")
+        image.save(output_path)
