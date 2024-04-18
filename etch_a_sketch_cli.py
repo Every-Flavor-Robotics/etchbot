@@ -16,6 +16,7 @@ def run_pipeline(
     input_file: pathlib.Path,
     output_dir: pathlib.Path,
     copy: bool = False,
+    skip_preprocessing: bool = False,
 ):
     # Print in green, processing the input file
     click.secho(f"Processing {input_file}...", fg="green")
@@ -53,7 +54,7 @@ def run_pipeline(
         input_file = new_input_file
 
     # Only run preprocessor if input file is an image
-    if not input_file.suffix in [".jpg", ".jpeg", ".png"]:
+    if not input_file.suffix in [".jpg", ".jpeg", ".png"] or skip_preprocessing:
         # Print in red, skipping pre-processing
         click.secho(f"Skipping pre-processing...", fg="red")
     else:
@@ -129,8 +130,19 @@ def run_pipeline(
     help="Copy the input file to the output directory",
     is_flag=True,
 )
-def main(input_file: pathlib.Path, output_dir: pathlib.Path, copy: bool):
-    run_pipeline(input_file, output_dir, copy)
+@click.option(
+    "--skip-preprocessing",
+    "-s",
+    help="Skip pre-processing",
+    is_flag=True,
+)
+def main(
+    input_file: pathlib.Path,
+    output_dir: pathlib.Path,
+    copy: bool,
+    skip_preprocessing: bool,
+):
+    run_pipeline(input_file, "pipeline_output" / output_dir, copy, skip_preprocessing)
 
 
 if __name__ == "__main__":
