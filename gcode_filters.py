@@ -42,14 +42,153 @@ class GCodeFilter(ABC):
         """
         # First, remove comments, signified by a semicolon
         line = line.split(";")[0]
+        # Remove comments signified by a parenthesis
+        line = line.split("(")[0]
+
         parts = line.split(" ")
         command = parts[0]
         args = {}
+
         for part in parts[1:]:
             key = part[0]
-            value = float(part[1:])
+            try:
+                value = float(part[1:])
+            except:
+                breakpoint()
             args[key] = value
         return command, args
+
+class GCodeCleaner(GCodeFilter):
+    """GCodeCleaner removes comments and empty lines from the GCode file.
+    """
+
+    def __init__(self):
+        """Initialize the GCodeCleaner."""
+        super().__init__()
+
+    def process(self, gcode_path: Path, output_path: Path) -> None:
+        """Process the input gcode file and return the output gcode file with comments and empty lines removed.
+
+        Args:
+            gcode_path (Path): Path to the GCode file to be processed
+            output_path (Path): Path to save the processed GCode file
+
+        Returns:
+            Path: Path to the processed GCode file, ready for the next step in the pipeline
+        """
+        super().process(gcode_path, output_path)
+
+        with open(gcode_path, "r") as f:
+            lines = f.readlines()
+
+        new_lines = []
+        for line in lines:
+            line = line.split(";")[0]
+            line = line.split("(")[0]
+            line = line.split("%")[0]
+            line = line.strip()
+            if line != "" and not line.startswith(";"):
+                new_lines.append(line + "\n")
+
+        with open(output_path, "w") as f:
+            f.writelines(new_lines)
+
+class RemoveZ(GCodeFilter):
+    """ RemoveZ removes the Z axis from the GCode file.
+
+    If a command only has a Z axis, it will be removed completely. If a command has an X, Y, and Z axis, the Z axis
+    will be removed.
+
+    """
+
+    def __init__(self):
+        """Initialize the RemoveZ."""
+        super().__init__()
+
+    def process(self, gcode_path: Path, output_path: Path) -> None:
+        """Process the input gcode file and return the output gcode file with the Z axis removed.
+
+        Args:
+            gcode_path (Path): Path to the GCode file to be processed
+            output_path (Path): Path to save the processed GCode file
+
+        Returns:
+            Path: Path to the processed GCode file, ready for the next step in the pipeline
+        """
+        super().process(gcode_path, output_path)
+
+        with open(gcode_path, "r") as f:
+            lines = f.readlines()
+
+        new_lines = []
+        for line in lines:
+            command, args = self.decode_line(line)
+
+            if "Z" in args:
+                del args["Z"]
+                # Remove F it is the only argument after Z
+                if("F" in args and len(args) == 1):
+                    del args["F"]
+
+            if(len(args) > 0):
+                new_line = f"{command} "
+                for key, value in args.items():
+                    new_line += f"{key}{value} "
+
+                new_line = new_line.strip() + "\n"
+                new_lines.append(new_line)
+
+        with open(output_path, "w") as f:
+            f.writelines(new_lines)
+
+class LoopCloser(GCodeFilter):
+    """LoopCloser closes loops in the GCode file.
+
+    The LoopCloser checks the first and last points in the GCode file and adds a line between them if they are not the
+    same.
+
+    """
+
+    def __init__(self):
+        """Initialize the LoopCloser."""
+        super().__init__()
+
+    def process(self, gcode_path: Path, output_path: Path) -> None:
+        """Process the input gcode file and return the output gcode file with closed loops.
+
+        Args:
+            gcode_path (Path): Path to the GCode file to be processed
+            output_path (Path): Path to save the processed GCode file
+
+        Returns:
+            Path: Path to the processed GCode file, ready for the next step in the pipeline
+        """
+        super().process(gcode_path, output_path)
+
+        with open(gcode_path, "r") as f:
+            lines = f.readlines()
+
+        if len(lines) == 0:
+            return
+
+        first_line = lines[0]
+        last_line = lines[-1]
+
+        first_command, first_args = self.decode_line(first_line)
+        last_command, last_args = self.decode_line(last_line)
+
+        first_x = first_args["X"]
+        first_y = first_args["Y"]
+
+        last_x = last_args["X"]
+        last_y = last_args["Y"]
+
+        if first_x != last_x or first_y != last_y:
+            # Add a line to close the loop
+            lines.append(f"G1 X{first_x} Y{first_y}\n")
+
+        with open(output_path, "w") as f:
+            f.writelines(lines)
 
 
 class ResolutionReducer(GCodeFilter):
@@ -87,8 +226,8 @@ class ResolutionReducer(GCodeFilter):
         new_lines = []
         last_point = None
 
-        i = 0
-        for line in lines:
+        previous_g0 = None
+        for i, line in enumerate(lines):
             command, args = self.decode_line(line)
 
             if command == "G1":
@@ -104,6 +243,31 @@ class ResolutionReducer(GCodeFilter):
                     if distance > self.tolerance:
                         new_lines.append(line)
                         last_point = (x, y)
+            elif command == "G0":
+                if previous_g0 is not None:
+                    new_lines.append(previous_g0)
+                previous_g0 = None
+
+                new_lines.append(line)
+
+                x = args["X"]
+                y = args["Y"]
+                # Loop to find the next G0
+                for j in range(i + 1, len(lines)):
+                    next_command, next_args = self.decode_line(lines[j])
+                    if next_command == "G0":
+                        break
+
+                command, args = self.decode_line(lines[j - 1])
+                if command == "G1":
+                    x_end = args["X"]
+                    y_end = args["Y"]
+
+                    # Compare the distance between the last point and the end point
+                    distance = ((x - x_end) ** 2 + (y - y_end) ** 2) ** 0.5
+                    if distance < self.tolerance:
+                        previous_g0 = f"G1 X{x_end} Y{y_end}\n"
+
             else:
                 new_lines.append(line)
 
@@ -208,7 +372,41 @@ class ColinearFilter(GCodeFilter):
         mag1 = (v1[0] ** 2 + v1[1] ** 2) ** 0.5
         mag2 = (v2[0] ** 2 + v2[1] ** 2) ** 0.5
 
-        # Calculate the dot product
-        dot_product = (v1[0] * v2[0] + v1[1] * v2[1]) / (mag1 * mag2)
-
+        try:
+            # Calculate the dot product
+            dot_product = (v1[0] * v2[0] + v1[1] * v2[1]) / (mag1 * mag2)
+        except:
+            dot_product = 0
         return dot_product
+
+
+class TSPOptimizer(GCodeFilter):
+    """TSPOptimizer optimizes the GCode file using the Travelling Salesman Problem.
+
+    The TSPOptimizer uses the Concorde TSP solver to optimize the order of the points in the GCode file. The Concorde
+    solver must be installed on the system and available in the PATH.
+    """
+
+    OPTIMIZER_PATH = "~/efr/gcode-optimizer/main.py"
+
+    def __init__(self):
+        """Initialize the TSPOptimizer."""
+        super().__init__()
+
+    def process(self, gcode_path: Path, output_path: Path) -> None:
+        """Process the input gcode file and return the output gcode file with the points optimized.
+
+        Args:
+            gcode_path (Path): Path to the GCode file to be processed
+            output_path (Path): Path to save the processed GCode file
+
+        Returns:
+            Path: Path to the processed GCode file, ready for the next step in the pipeline
+        """
+        super().process(gcode_path, output_path)
+
+        # Construct the command to run the optimizer
+        command = f"python {self.OPTIMIZER_PATH} --input_file {gcode_path} --output_file {output_path}"
+
+        # Run the optimizer
+        subprocess.run(command, shell=True)

@@ -6,10 +6,17 @@ from image_preprocessors import (
     ColorbookPreprocessor,
     AspectRatioPreprocessor,
     CoherentLineDrawingPreprocessor,
+    BlackAndWhitePreprocessor,
 )
 from vectorizers import PotraceVectorizer
 from gcode_generators import Svg2GcodeGenerator
-from gcode_filters import ResolutionReducer, ColinearFilter
+from gcode_filters import (
+    ResolutionReducer,
+    ColinearFilter,
+    TSPOptimizer,
+    GCodeCleaner,
+    RemoveZ,
+)
 
 
 def run_pipeline(
@@ -28,13 +35,20 @@ def run_pipeline(
     # Create the strategies for each of the steps
     preprocessors = [
         AspectRatioPreprocessor(16 / 11),
-        CoherentLineDrawingPreprocessor(
-            etf_kernel=5, sigma_c=0.361, sigma_m=4.0, tau=0.9, rho=0.997
-        ),
+        # CoherentLineDrawingPreprocessor(
+        #     etf_kernel=5, sigma_c=0.361, sigma_m=4.0, tau=0.9, rho=0.997
+        # ),
+        BlackAndWhitePreprocessor(),
     ]
     vectorizers = [PotraceVectorizer()]
     gcode_converters = [Svg2GcodeGenerator()]
-    gcode_filters = [ResolutionReducer(2), ColinearFilter(0.996)]
+    gcode_filters = [
+        GCodeCleaner(),
+        RemoveZ(),
+        ResolutionReducer(1.2),
+        ColinearFilter(0.996),
+        TSPOptimizer(),
+    ]
 
     # Confirm that the input file exists
     if not input_file.exists():
