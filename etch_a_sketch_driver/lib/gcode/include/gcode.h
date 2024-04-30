@@ -63,7 +63,7 @@ class GCodeParser
  public:
   // Constructor (you might want to initialize variables here)
   GCodeParser(GCodeStream *stream, size_t max_buffer_size = 10,
-              float rapid_feedrate = 5000.0f);
+              float rapid_feedrate = 12000.0f);
 
   void init();
 
