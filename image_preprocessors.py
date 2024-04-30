@@ -5,6 +5,8 @@ from click import secho
 
 from PIL import Image
 
+import cv2
+
 
 class ImagePreprocessor(ABC):
     """Abstract class for image preprocessors.
@@ -266,3 +268,86 @@ class CoherentLineDrawingPreprocessor(ImagePreprocessor):
         # Open the image and convert to grayscale
         image = Image.open(output_path).convert("L")
         image.save(output_path)
+
+
+class DeNoisePreprocessor(ImagePreprocessor):
+    """DeNoise Preprocessor removes noise from the input image."""
+
+    def __init__(self, noise_factor: float = 0.5):
+        """Initialize the DeNoise Preprocessor with the noise factor.
+
+        Args:
+            noise_factor (float): Factor to remove noise from the image
+        """
+        self.noise_factor = noise_factor
+
+    def process(self, image_path: Path, output_path: Path) -> None:
+        """Process the input image and return the output image.
+
+        Args:
+            image_path (Path): Path to the raw image to be processed
+            output_path (Path): Path to save the processed image
+
+        Returns: None
+        """
+
+        super().process(image_path, output_path)
+
+        # Confirm that the input image exists
+        if not image_path.exists():
+            raise FileNotFoundError(f"Image {image_path} not found.")
+
+        # Load the image
+        image = Image.open(image_path)
+
+        # Remove noise from the image
+        image = self.de_noise(image)
+
+        # Save the de-noised image
+        image.save(output_path)
+
+        # Confirm that the output image exists
+        if not output_path.exists():
+            raise FileNotFoundError(
+                f"Output image {output_path} not generated correctly."
+            )
+
+    def de_noise(self, img: Image) -> Image:
+        """Remove noise from the image."""
+
+        return image
+
+
+class BlackAndWhitePreprocessor(ImagePreprocessor):
+    """Black and White Preprocessor converts the input image to black and white."""
+
+    def process(self, image_path: Path, output_path: Path) -> None:
+        """Process the input image and return the output image.
+
+        Args:
+            image_path (Path): Path to the raw image to be processed
+            output_path (Path): Path to save the processed image
+
+        Returns: None
+        """
+
+        super().process(image_path, output_path)
+
+        # Confirm that the input image exists
+        if not image_path.exists():
+            raise FileNotFoundError(f"Image {image_path} not found.")
+
+        # Load the image
+        image = Image.open(image_path)
+
+        # Convert the image to black and white
+        image = image.convert("L")
+
+        # Save the black and white image
+        image.save(output_path)
+
+        # Confirm that the output image exists
+        if not output_path.exists():
+            raise FileNotFoundError(
+                f"Output image {output_path} not generated correctly."
+            )
