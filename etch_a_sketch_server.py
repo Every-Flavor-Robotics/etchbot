@@ -14,9 +14,11 @@ OUTPUT_DIR = Path("gcode_outputs")
 
 app = Flask(__name__)
 
-@app.route('/upload', methods=['POST'])
+
+@app.route("/upload", methods=["POST"])
 def upload_file():
-    file = request.files['image']
+    print("Receiving image...")
+    file = request.files["image"]
 
     image = Image.open(io.BytesIO(file.read()))
 
@@ -24,17 +26,21 @@ def upload_file():
 
     save_path = UPLOAD_DIR / f"{time.strftime('%m%d%H%M%S')}.png"
 
+    image.save(save_path)
 
-    return 'Image processing started.'
+    return "Image processing started."
+
 
 # Create a function that constantly checks UPLOAD DIR for new files
 def process_images():
+    print("Processing thread started.")
     while True:
         for image_path in UPLOAD_DIR.iterdir():
-            if image_path.suffix in ['.jpg', '.jpeg', '.png']:
+            print("Processing image:", image_path)
+            if image_path.suffix in [".jpg", ".jpeg", ".png"]:
                 processing_dir = PROCESSING_DIR / image_path.stem
                 processing_dir.mkdir()
-                run_pipeline(image_path, processing_dir)
+                run_pipeline(image_path, processing_dir, copy=True)
 
                 # Delete the image after processing
                 image_path.unlink()
@@ -44,11 +50,10 @@ def process_images():
                 output_path = OUTPUT_DIR / f"{image_path.stem}.gcode"
                 shutil.copy(gcode_path, output_path)
 
-
         time.sleep(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Confirm that the output directory exists
     if not UPLOAD_DIR.exists():
         UPLOAD_DIR.mkdir()
@@ -61,6 +66,6 @@ if __name__ == '__main__':
 
     # Start the processing thread
     processing_thread = threading.Thread(target=process_images)
+    processing_thread.start()
 
-
-    app.run(debug=True)
+    app.run("0.0.0.0", debug=True)
