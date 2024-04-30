@@ -161,5 +161,8 @@ cython_debug/
 
 # Project specifics
 pipeline_output
+gcode_outputs
+manual_uploads
 uploads
 .vscode
+processing
