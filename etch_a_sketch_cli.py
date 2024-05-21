@@ -7,6 +7,8 @@ from image_preprocessors import (
     AspectRatioPreprocessor,
     CoherentLineDrawingPreprocessor,
     BlackAndWhitePreprocessor,
+    RemBGPreprocessor,
+    CartoonifyPreProcessor,
 )
 from vectorizers import PotraceVectorizer
 from gcode_generators import Svg2GcodeGenerator
@@ -32,12 +34,20 @@ def run_pipeline(
     if not output_dir.exists():
         output_dir.mkdir()
 
-    # Create the strategies for each of the steps
+        # Create the strategies for each of the steps
+        # preprocessors = [
+        #     # AspectRatioPreprocessor(16 / 11),
+        #     RemBGPreprocessor(),
+        #     CoherentLineDrawingPreprocessor(
+        #         etf_kernel=5, sigma_c=1.025, sigma_m=4.732, tau=0.894, rho=0.994
+        #     ),
+        #     BlackAndWhitePreprocessor(),
+        # ]
+
     preprocessors = [
         AspectRatioPreprocessor(16 / 11),
-        # CoherentLineDrawingPreprocessor(
-        #     etf_kernel=5, sigma_c=0.361, sigma_m=4.0, tau=0.9, rho=0.997
-        # ),
+        CartoonifyPreProcessor(),
+        ColorbookPreprocessor(),
         BlackAndWhitePreprocessor(),
     ]
     vectorizers = [PotraceVectorizer()]
@@ -116,9 +126,9 @@ def run_pipeline(
         # Filter the G-code
         click.secho(f"Filtering G-code...", fg="green")
         for gcode_filter in gcode_filters:
-            gcode_filter.process(input_file, output_dir / "filtered.gcode")
+            gcode_filter.process(input_file, output_dir / "output.gcode")
 
-            input_file = output_dir / "filtered.gcode"
+            input_file = output_dir / "output.gcode"
 
     return input_file
 
