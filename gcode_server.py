@@ -1,184 +1,181 @@
+import pathlib
+import socketserver
+import time
+import click
+import threading
 import socket
+from flask import Flask, jsonify
 
-host = ""  # Listen on all interfaces
-port = 5000
-
-# gcode_drawing = "pipeline_output/couch_hand_drawing/filtered.gcode"
-# gcode_calibration = "pipeline_output/test_circle.gcode"
-
-# gcode_lines = []
-# with open(gcode_calibration) as f:
-#     gcode_lines = f.readlines()
-#     gcode_lines.append("G28\n")
+gcode_buffer = []
+buffer_lock = threading.Lock()
 
 
-title_cards = [
-    "pipeline_output/title_10/filtered.gcode",
-    "pipeline_output/title_09/filtered.gcode",
-    "pipeline_output/title_08/filtered.gcode",
-    "pipeline_output/title_07/filtered.gcode",
-    "pipeline_output/title_06/filtered.gcode",
-    "pipeline_output/title_05/filtered.gcode",
-    "pipeline_output/mogodemo/filtered.gcode",
-    "pipeline_output/pikachu/filtered.gcode",
-    "pipeline_output/couch_hand_drawing/filtered.gcode",
-    "pipeline_output/this_is_fine/filtered.gcode",
-    "pipeline_output/doggo/filtered.gcode",
-]
+class GCode:
+    def __init__(self, gcode_file, lines=None):
+        self.gcode_file = gcode_file
 
-# Read all in and chain them together
-gcode_lines = []
-for title_card in title_cards:
-    print("Reading title card:", title_card)
-    with open(title_card) as f:
-        gcode_lines.extend(f.readlines())
-        gcode_lines.append("G28\n")
+        if lines != None:
+            self.gcode_lines = lines
+        else:
+            self.gcode_lines = []
+            with open(gcode_file) as f:
+                self.gcode_lines = f.readlines()
+                self.gcode_lines.append("G28\n")
+                self.gcode_lines.append("END\n")
 
-# Remove all comments
-# for i in range(len(gcode_lines)):
-#     # Look for a semicolon in line
-#     comment_index = gcode_lines[i].find(";")
-#     if comment_index != -1:
-#         gcode_lines[i] = gcode_lines[i][:comment_index] + "\n"
+        self.line_number = 0
 
-# # Remove all empty lines
-# gcode_lines = [line for line in gcode_lines if line.strip() != ""]
+    def get_gcode(self, num_lines):
+        gcode_block = "".join(
+            self.gcode_lines[self.line_number : self.line_number + num_lines]
+        )
+        self.line_number += num_lines
+        return gcode_block
+
+    def complete(self):
+        return self.line_number >= len(self.gcode_lines)
+
+    def delete_file(self):
+        if self.gcode_file is not None:
+            self.gcode_file.unlink()
+
+    def reset(self):
+        self.line_number = 0
 
 
-def main():
+class EmptyGCode(GCode):
+    def __init__(self):
+        # Call init with END line only
+        super().__init__(None, ["END\n"])
+
+
+class GCodeRequestHandler(socketserver.StreamRequestHandler):
     start_line = 0
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+
+    def handle(self):
+        global gcode_buffer, buffer_lock
+
+        print("Connected by", self.client_address)
+
+        with buffer_lock:
+            if len(gcode_buffer) == 0:
+                print("No GCode in buffer. Sending empty GCode.")
+                gcode = EmptyGCode()
+            else:
+                gcode = gcode_buffer.pop(0)
+
         try:
-            s.bind((host, port))
-            s.listen()
-            print("Server listening...")
-            conn, addr = s.accept()
-            with conn:
-                print("Connected by", addr)
-                while True:
-                    data = conn.recv(1024).decode()
-                    print("Received data")
-                    print("------ data start ------")
-                    print(data)
-                    print("------ data end --------")
-                    if data.startswith("GET /gcode?lines="):
-                        # Extract the requested number of lines
-                        try:
-                            num_lines_requested = int(data.split("=")[1].split(" ")[0])
-                        except (ValueError, IndexError):
-                            conn.sendall(b"Invalid request format.\n")
-                            continue
+            while not gcode.complete():
+                self.request.settimeout(5)
 
-                        # Send the G-code lines
-                        print(
-                            len(
-                                gcode_lines[
-                                    start_line : start_line + num_lines_requested
-                                ]
-                            )
-                        )
-                        gcode_block = "".join(
-                            gcode_lines[start_line : start_line + num_lines_requested]
-                        )
-                        start_line += num_lines_requested
+                print("Waiting for data...")
+                data = self.request.recv(1024).strip().decode()
+                if data.startswith("GET /gcode?lines="):
+                    try:
+                        num_lines_requested = int(data.split("=")[1].split(" ")[0])
+                    except (ValueError, IndexError):
+                        self.request.sendall(b"Invalid request format.\n")
+                        continue
+                    # Send the G-code lines
+                    gcode_block = gcode.get_gcode(num_lines_requested)
 
-                        if start_line >= len(gcode_lines):
-                            start_line = 0
-                        print("Sending response")
-                        print(gcode_block)
-                        conn.sendall(gcode_block.encode())
-                        print("Response sent")
-                    # else:
-                    #     conn.sendall(b"Invalid request.\n")
-        except KeyboardInterrupt:
-            print("Keyboard interrupt detected. Closing socket...")
-            s.close()
+                    print("Sending response")
+                    self.request.sendall(gcode_block.encode())
+
+                    print("Response sent")
+            # Delete gcode file
+            gcode.delete_file()
+        except socket.timeout:
+            print("Connection timed out. Will retry this gcode next time")
+            # Put gcode back in the buffer
+            gcode.reset()
+            with buffer_lock:
+                gcode_buffer.insert(0, gcode)
+
+        except (ConnectionResetError, BrokenPipeError):
+            print("Connection closed by client. Will retry this gcode next time")
+
+            # Put gcode back in the buffer
+            gcode.reset()
+            with buffer_lock:
+                gcode_buffer.insert(0, gcode)
+
+        # Close the socket and connection
+        print("G-code transmission ended. Closing connection.")
+        self.request.close()
+
+
+def get_new_gcode(scan_directory: pathlib.Path):
+    """Thread for reading new GCode files"""
+    global gcode_buffer, buffer_lock
+
+    print("Scanning directory:", scan_directory)
+
+    processed_files = set()
+    while True:
+        # Check for new GCode files
+        new_gcode_files = list(scan_directory.glob("*.gcode"))
+
+        # Remove already processed files from the list
+        new_gcode_files = [
+            gcode_file
+            for gcode_file in new_gcode_files
+            if gcode_file not in processed_files
+        ]
+
+        # Process new GCode files
+        for gcode_file in new_gcode_files:
+            print("Reading new GCode file:", gcode_file)
+            with buffer_lock:
+                gcode_buffer.append(GCode(gcode_file))
+            processed_files.add(gcode_file)
+
+        # Sleep for a while
+        time.sleep(2)
+
+
+### Code for rest endpoint to allow etch a sketch to check if gcode is available
+app = Flask(__name__)
+
+
+@app.route("/gcode/available")
+def gcode_available():
+    global gcode_buffer, buffer_lock
+    with buffer_lock:
+        # Return 200 if there is GCode in the buffer, else 204
+        if len(gcode_buffer) > 0:
+            return "", 200
+        else:
+            print("Returng 204")
+            return "", 204
+
+
+# Add click argument for gcode directory
+@click.command()
+@click.option(
+    "--gcode_dir",
+    default="gcode_outputs",
+    help="Directory containing GCode files",
+    type=click.Path(exists=True),
+)
+def main(gcode_dir: pathlib.Path):
+
+    gcode_dir = pathlib.Path(gcode_dir)
+    # Start the GCode reading thread
+    gcode_thread = threading.Thread(target=get_new_gcode, args=(gcode_dir,))
+    gcode_thread.start()
+
+    # Start the Flask app to host the rest endpoint
+    flask_thread = threading.Thread(
+        target=app.run, kwargs={"host": "0.0.0.0", "port": 5001}
+    )
+    flask_thread.start()
+
+    host, port = "0.0.0.0", 5000  # Your host and port here
+    with socketserver.TCPServer((host, port), GCodeRequestHandler) as server:
+        print("Server listening...")
+        server.serve_forever()
 
 
 if __name__ == "__main__":
     main()
-
-
-# import socketserver
-# import time
-# import threading
-
-# kill_signal = False
-# kill_signal_served = True
-
-
-# class GCodeRequestHandler(socketserver.StreamRequestHandler):
-#     start_line = 0
-
-#     def handle(self):
-#         global kill_signal, kill_signal_served
-
-#         print("Connected by", self.client_address)
-
-#         # Signal to all previous processes to stop
-#         kill_signal = True
-#         while not kill_signal_served:
-#             time.sleep(1)
-#         # Reset the kill signal
-#         kill_signal_served = False
-#         kill_signal = False
-
-#         last_heartbeat = time.time()
-#         # Start the heartbeat thread
-#         threading.Thread(target=self.send_heartbeat, args=(1,)).start()
-
-#         while not kill_signal:
-#             print("Waiting for data...")
-#             data = self.request.recv(1024).strip().decode()
-#             print(type(data))
-#             print("Received data")
-#             print("------ data start ------")
-#             print(data)
-#             print("------ data end --------")
-#             if data.startswith("GET /gcode?lines="):
-#                 try:
-#                     num_lines_requested = int(data.split("=")[1].split(" ")[0])
-#                 except (ValueError, IndexError):
-#                     self.wfile.write(b"Invalid request format.\n")
-#                     continue
-#                 # Send the G-code lines
-#                 print(
-#                     len(
-#                         gcode_lines[
-#                             self.start_line : self.start_line + num_lines_requested
-#                         ]
-#                     )
-#                 )
-#                 gcode_block = "".join(
-#                     gcode_lines[self.start_line : self.start_line + num_lines_requested]
-#                 )
-#                 self.start_line += num_lines_requested
-#                 if self.start_line >= len(gcode_lines):
-#                     self.start_line = 0
-#                 print("Sending response")
-#                 print(gcode_block)
-#                 self.wfile.write(gcode_block.encode())
-#                 print("Response sent")
-
-#             # if time.time() - last_heartbeat > 1:
-#             #     self.send_heartbeat(1)
-#             #     last_heartbeat = time.time()
-#         print("Received a kill signal... Closing connection.")
-
-#     def send_heartbeat(self, interval):
-
-#         last_heartbeat = time.time()
-#         while True:
-#             if time.time() - last_heartbeat > interval:
-#                 # Heartbeat is 0x00 ASCII
-#                 print("Sending heartbeat...")
-#                 heartbeat_message = "\x01"
-#                 self.request.sendall(heartbeat_message.encode())
-#                 last_heartbeat = time.time()
-
-
-# if __name__ == "__main__":
-#     host, port = "0.0.0.0", 5000  # Your host and port here
-#     with socketserver.TCPServer((host, port), GCodeRequestHandler) as server:
-#         print("Server listening...")
-#         server.serve_forever()
