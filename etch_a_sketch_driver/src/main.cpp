@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <WebSocketsServer.h>  // Add this for WebSockets
+#include <WebSocketsServer.h>
 #include <esp_task_wdt.h>
 #include <motorgo_mini.h>
 
@@ -44,14 +44,13 @@ typedef union
 // #define OL_VELOCITY_LIMIT 15
 float OL_VELOCITY_LIMIT = 0;
 size_t replan_horizon = 1;
-2
 
 // float FEEDRATE = 8000;
 
 #define X_LIM 130
 #define Y_LIM 89.375
 
-    TaskHandle_t loop_foc_task;
+TaskHandle_t loop_foc_task;
 TickType_t xLastWakeTime;
 void loop_foc(void* pvParameters);
 MotorGo::MotorGoMini motorgo_mini;
@@ -84,8 +83,8 @@ LowPassFilter left_right_velocity_lpf(0.003);
 LowPassFilter up_down_velocity_lpf(0.003);
 
 MotorGo::PIDParameters planner_lpf_params;
-LowPassFilter planner_left_right_velocity_lpf(0.0005);
-LowPassFilter planner_up_down_velocity_lpf(0.0005);
+LowPassFilter planner_left_right_velocity_lpf(0.000);
+LowPassFilter planner_up_down_velocity_lpf(0.000);
 
 // declare PID manager object
 MotorGo::PIDManager pid_manager;
@@ -99,6 +98,8 @@ std::atomic<float> up_down_gain_schedule(1.0);
 // Whether running in OL or CL mode
 std::atomic<bool> left_right_ol_mode(false);
 std::atomic<bool> up_down_ol_mode(false);
+float left_right_gain_multiplier = 1.0;
+float up_down_gain_multiplier = 1.0;
 
 std::atomic<int> foc_loops(0);
 
@@ -152,19 +153,6 @@ void enable_motors_callback(bool value)
   }
 }
 
-// Function to print at a maximum frequency
-void freq_println(String str, int freq)
-{
-  static unsigned long last_print_time = 0;
-  unsigned long now = millis();
-
-  if (now - last_print_time > 1000 / freq)
-  {
-    Serial.println(str);
-    last_print_time = now;
-  }
-}
-
 void home()
 {
   Serial.println("HOMING: WAITING FOR BUTTON PRESS");
@@ -176,67 +164,10 @@ void home()
     delay(100);
   }
 
-  // Wait until button is pressed
-  //   while (digitalRead(0))
-  //   {
-  //     delay(100);
-  //   }
   Serial.println("HOMING: BEGINNING");
   delay(1000);
   left_right.zero_position();
   up_down.zero_position();
-  // Drive negative direction for 20 rads
-  // Set target velocity to -5
-  //   left_right.zero_position();
-  //   while (left_right.get_position() > -30)
-  //   {
-  //     left_right_velocity_target.store(-5);
-  //   }
-  //   left_right_velocity_target.store(0);
-  //   delay(10);
-
-  //   left_right.zero_position();
-
-  //   // Drive negative direction for 20 rads
-  //   // Set target velocity to -5
-  //   up_down.zero_position();
-  //   while (up_down.get_position() > -20)
-  //   {
-  //     up_down_velocity_target.store(-5);
-  //   }
-  //   up_down_velocity_target.store(0);
-  //   delay(10);
-
-  //   up_down.zero_position();
-
-  //   // Move 4 mm in the positive x and y direction away from the corner
-  //   Planner::TrapezoidTrajectoryParameters zero;
-  //   zero.x_initial = 0;
-  //   zero.y_initial = 0;
-  //   zero.x_final = 4;
-  //   zero.y_final = 4;
-  //   zero.v_initial = 0;
-  //   zero.v_final = 0;
-  //   zero.v_target = 50;
-  //   zero.a_target = ACCELERATION / 2;
-
-  //   Planner::TrapezoidVelocityTrajectory zero_trajectory =
-  //       Planner::generate_trapezoid_profile(zero);
-
-  //   Planner::TrajectoryState zero_state;
-  //   zero_state.is_complete = false;
-  //   while (!zero_state.is_complete)
-  //   {
-  //     long now = micros();
-  //     zero_state =
-  //         Planner::compute_trapezoid_velocity_vector(zero_trajectory, now);
-
-  //     left_right_velocity_target.store(zero_state.v.x);
-  //     up_down_velocity_target.store(zero_state.v.y);
-  //   }
-
-  //   left_right.zero_position();
-  //   up_down.zero_position();
 }
 
 unsigned long start_time = 0;
@@ -253,7 +184,7 @@ void setup()
   // Configure onboard button as input
   pinMode(0, INPUT_PULLUP);
 
-  Serial.begin(115200);
+  Serial.begin(5000000);
   delay(3000);
 
   MotorGo::MotorConfiguration motor_config;
@@ -274,21 +205,31 @@ void setup()
   config_ch1.power_supply_voltage = 17.0;
   config_ch1.reversed = false;
 
-  left_right_velocity_pid_params.p = 0.25;
-  left_right_velocity_pid_params.i = 0.00;
+  left_right_velocity_pid_params.p = 0.26;
+  left_right_velocity_pid_params.i = 0.0;
   left_right_velocity_pid_params.d = 0.0;
   left_right_velocity_pid_params.lpf_time_constant = 0.00;
-  left_right_ff_accel_gain = 0.07 / 100;
-  left_right_ff_velocity_gain = 0.03;
+  left_right_ff_accel_gain = 0.04 / 100;
+  left_right_ff_velocity_gain = 0.025;
 
-  up_down_velocity_pid_params.p = 0.255;
-  up_down_velocity_pid_params.i = 0.00;
+  left_right_velocity_pid.P = left_right_velocity_pid_params.p;
+  left_right_velocity_pid.I = 0;
+  left_right_velocity_pid.D = 0;
+  left_right_velocity_lpf.Tf = left_right_velocity_pid_params.lpf_time_constant;
+
+  up_down_velocity_pid_params.p = 0.26;
+  up_down_velocity_pid_params.i = 0.0;
   up_down_velocity_pid_params.d = 0.0;
   up_down_velocity_pid_params.lpf_time_constant = 0.00;
-  up_down_ff_accel_gain = 0.07 / 100;
-  up_down_ff_velocity_gain = 0.03;
+  up_down_ff_accel_gain = 0.04 / 100;
+  up_down_ff_velocity_gain = 0.025;
 
-  planner_lpf_params.lpf_time_constant = 0.0005;
+  up_down_velocity_pid.P = up_down_velocity_pid_params.p;
+  up_down_velocity_pid.I = 0;
+  up_down_velocity_pid.D = 0;
+  up_down_velocity_lpf.Tf = up_down_velocity_pid_params.lpf_time_constant;
+
+  planner_lpf_params.lpf_time_constant = 0.000;
 
   pid_manager.add_controller(
       "/left_right/velocity", left_right_velocity_pid_params,
@@ -327,18 +268,21 @@ void setup()
         up_down_velocity_lpf.Tf = up_down_velocity_pid_params.lpf_time_constant;
       });
 
-  pid_manager.add_controller("/planner_lpf", planner_lpf_params,
-                             []()
-                             {
-                               planner_left_right_velocity_lpf.Tf =
-                                   planner_lpf_params.lpf_time_constant;
-                               planner_up_down_velocity_lpf.Tf =
-                                   planner_lpf_params.lpf_time_constant;
+  pid_manager.add_controller(
+      "/planner_lpf", planner_lpf_params,
+      []()
+      {
+        planner_left_right_velocity_lpf.Tf =
+            planner_lpf_params.lpf_time_constant;
+        planner_up_down_velocity_lpf.Tf = planner_lpf_params.lpf_time_constant;
 
-                               //    OL_VELOCITY_LIMIT = planner_lpf_params.p;
-                               //    replan_horizon = planner_lpf_params.i;
-                               //    FEEDRATE = planner_lpf_params.d;
-                             });
+        up_down_gain_multiplier = planner_lpf_params.p;
+        left_right_gain_multiplier = planner_lpf_params.i;
+
+        OL_VELOCITY_LIMIT = planner_lpf_params.d;
+        //    replan_horizon = planner_lpf_params.i;
+        //    FEEDRATE = planner_lpf_params.d;
+      });
 
   enable_motors.set_post_callback(enable_motors_callback);
 
@@ -348,17 +292,17 @@ void setup()
   up_down.init(config_ch1, calibrate);
 
   //   Set closed-loop velocity mode
-  left_right.set_control_mode(MotorGo::ControlMode::VelocityOpenLoop);
-  up_down.set_control_mode(MotorGo::ControlMode::VelocityOpenLoop);
+  left_right.set_control_mode(MotorGo::ControlMode::Voltage);
+  up_down.set_control_mode(MotorGo::ControlMode::Voltage);
 
-  pid_manager.init("NotARobot", "M1crowave!");
+  pid_manager.init(WIFI_SSID, WIFI_PASSWORD);
 
   // Start the WebSocket server
   //   webSocket.begin();
   //   webSocket.onEvent(webSocketEvent);
 
-  stream = new GCode::WifiGCodeStream("192.168.0.15", 100);
-  parser = new GCode::GCodeParser(stream, 1000);
+  stream = new GCode::WifiGCodeStream("192.168.10.15", 50);
+  parser = new GCode::GCodeParser(stream, 2000);
 
   GCode::start_parser(*parser);
 
@@ -371,31 +315,21 @@ void setup()
       &loop_foc_task, /* Task handle to keep track of created task */
       1);             /* pin task to core 1 */
 
-  //   left_right.zero_position();
-  //   up_down.zero_position();
-
   state.is_complete = false;
-
-  //   Wait until button is pressed
-  //   Serial.println("Ready to begin... Press button to start");
-  //   while (digitalRead(0))
-  //   {
-  //     delay(100);
-  //   }
-
-  //   delay(1000);
 
   start_time = micros();
 
-  //   left_right.enable();
-  //   up_down.enable();
-  home();
+  left_right.zero_position();
+  up_down.zero_position();
+  left_right.enable();
+  up_down.enable();
+  //   home();
+  state.is_complete = true;
 }
 
 float target = 0.0;
 // Chrono microsChrono(Chrono::MICROS);
 unsigned int i = 0;
-
 void loop_foc(void* pvParameters)
 {
   Serial.print("Loop FOC running on core ");
@@ -431,6 +365,17 @@ void loop_foc(void* pvParameters)
     float lr_velocity = left_right_velocity_lpf(left_right.get_velocity());
     float ud_velocity = up_down_velocity_lpf(up_down.get_velocity());
 
+    float left_right_gain = 1.0;
+    if (lr_velocity < 0.01)
+    {
+      left_right_gain = left_right_gain_multiplier;
+    }
+    float up_down_gain = 1.0;
+    if (ud_velocity < 0.01)
+    {
+      up_down_gain = up_down_gain_multiplier;
+    }
+
     // If in OL mode, simply set the target velocity
     if (left_right_ol_mode.load())
     {
@@ -445,7 +390,7 @@ void loop_foc(void* pvParameters)
           left_right_ff_velocity_gain * local_lr_vel_target +
           left_right_velocity_pid(local_lr_vel_target - lr_velocity);
 
-      left_right.set_target_voltage(lr_command);
+      left_right.set_target_voltage(lr_command * left_right_gain);
     }
 
     if (up_down_ol_mode.load())
@@ -459,7 +404,7 @@ void loop_foc(void* pvParameters)
           up_down_ff_velocity_gain * local_ud_vel_target +
           up_down_velocity_pid(local_ud_vel_target - ud_velocity);
 
-      up_down.set_target_voltage(ud_command);
+      up_down.set_target_voltage(ud_command * up_down_gain);
     }
 
     // // Print targets
@@ -474,58 +419,33 @@ void loop_foc(void* pvParameters)
     foc_loops++;
 
     esp_task_wdt_reset();
-
-    // if (i % 5000 == 1)
-    // {
-    //   // chrono
-    //   Serial.println(microsChrono.elapsed());
-    // }
-    // i++;
-    // microsChrono.restart();
   }
 }
 
 Planner::TrapezoidVelocityTrajectory cur_trajectory;
-// unsigned long last_print_time = 0;
 float last_final_x = 0;
 float last_final_y = 0;
-bool printed = false;
-size_t replan_counter = 0;
 GCode::MotionCommand current_command;
-
-// float fake_position_x = 0;
-// float fake_position_y = 0;
-// float fake_velocity_x = 0;
-// float fake_velocity_y = 0;
 
 float previous_velocity_x = 0;
 float previous_velocity_y = 0;
 unsigned long previous_loop_time = 0;
 
 unsigned long last_loop_time = 0;
+bool first = true;
+
 void loop()
 {
-  //   unsigned long plot_time = micros();
-  //   if (plot_time - last_print_time > 1e6 / 100)
-  //   {
-  //     data_packet_t dataPacket;
-  //     dataPacket.timestamp = plot_time;
-  //     dataPacket.sampleValue = state.v.x;
-  //     strcpy(dataPacket.name, "command");
+  // Safety conditions
+  if (left_right.get_position() > (X_LIM + 8) * RAD_PER_MM ||
+      left_right.get_position() < -8 * RAD_PER_MM ||
+      up_down.get_position() > (Y_LIM + 8) * RAD_PER_MM ||
+      up_down.get_position() < -8 * RAD_PER_MM)
+  {
+    Serial.println("Position out of bounds");
+    disable_flag = true;
+  }
 
-  //     webSocket.broadcastBIN(dataPacket.raw, DATA_PACKET_LEN);
-
-  //     // data_packet_t dataPacket2;
-  //     // dataPacket2.timestamp = plot_time;
-  //     // dataPacket2.sampleValue = fake_velocity_x;
-  //     // strcpy(dataPacket2.name, "actual");
-
-  //     // webSocket.broadcastBIN(dataPacket2.raw, DATA_PACKET_LEN);
-
-  //     last_print_time = plot_time;
-  //   }
-  // We've completed the previous motion AND there are more commands to
-  // parse
   if (state.is_complete && parser->is_available())
   {
     // Retrieve next command
@@ -545,11 +465,16 @@ void loop()
         // Force a replan when we have a new command
         foc_loops.store(replan_horizon);
         state.is_complete = false;
+        if (first)
+        {
+          first = false;
+          vTaskDelay(3000 / portTICK_PERIOD_MS);
+        }
 
         // Print command
-        Serial.println("Command: " + String(current_command.x) + ", " +
-                       String(current_command.y) + ", " +
-                       String(current_command.feedrate));
+        // Serial.println("Command: " + String(current_command.x) + ", " +
+        //                String(current_command.y) + ", " +
+        //                String(current_command.feedrate));
 
         // Serial.println("Next command ready");
         // while (digitalRead(0))
@@ -562,71 +487,31 @@ void loop()
     }
   }
 
-  float cur_left_right_velocity =
-      planner_left_right_velocity_lpf(left_right.get_velocity());
-  float cur_up_down_velocity =
-      planner_up_down_velocity_lpf(up_down.get_velocity());
-
-  //   if (abs(cur_left_right_velocity) < 0.003)
-  //   {
-  //     left_right_gain_schedule.store(3.0);
-  //   }
-  //   else
-  //   {
-  //     left_right_gain_schedule.store(1.0);
-  //   }
-
-  //   if (abs(cur_up_down_velocity) < 0.003)
-  //   {
-  //     up_down_gain_schedule.store(3.0);
-  //   }
-  //   else
-  //   {
-  //     up_down_gain_schedule.store(1.0);
-  //   }
+  float cur_left_right_velocity = left_right.get_velocity();
+  float cur_up_down_velocity = up_down.get_velocity();
 
   //   Update position based on current velocity
-  //   fake_position_x += fake_velocity_x * (fake_now - last_loop_time) / 1e6;
-  //   fake_position_y += fake_velocity_y * (fake_now - last_loop_time) / 1e6;
   //   Generate a new profile
   if (foc_loops.load() >= replan_horizon)
   {
-    // Serial.println("Commands: " + String(current_command.x) + ", " +
-    //                String(current_command.y) + ", " +
-    //                String(current_command.feedrate));
-
     unsigned long trajectory_start_time = micros();
     Planner::TrapezoidTrajectoryParameters profile;
     profile.x_initial = left_right.get_position();
     profile.y_initial = up_down.get_position();
-    // FAKE version
-    // profile.x_initial = fake_position_x;
-    // profile.y_initial = fake_position_y;
+
     profile.x_final =
         constrain(current_command.x * RAD_PER_MM, 0, X_LIM * RAD_PER_MM);
     profile.y_final =
         constrain(current_command.y * RAD_PER_MM, 0, Y_LIM * RAD_PER_MM);
 
-    // profile.x_final =
-    //     constrain(current_command.x * RAD_PER_MM, -X_LIM * RAD_PER_MM / 2,
-    //               X_LIM * RAD_PER_MM / 2);
-
-    // profile.y_final =
-    //     constrain(current_command.y * RAD_PER_MM, -Y_LIM * RAD_PER_MM / 2,
-    //               Y_LIM * RAD_PER_MM / 2);
-
     // Compute current velocity magnitude
     float current_velocity =
         sqrt(pow(cur_left_right_velocity, 2) + pow(cur_up_down_velocity, 2));
-    // FAKE version
-    // float current_velocity =
-    //     sqrt(pow(fake_velocity_x, 2) + pow(fake_velocity_y, 2));
 
     // For now, fix initial and final velocities to 0
     profile.v_initial = current_velocity;
     profile.v_final = 0;
     profile.v_target = current_command.feedrate * MMPERMIN_TO_RADPERSEC;
-    // profile.v_target = FEEDRATE * MMPERMIN_TO_RADPERSEC;
     profile.a_target = ACCELERATION;
 
     last_final_x = profile.x_final;
@@ -636,17 +521,10 @@ void loop()
     cur_trajectory.start_time_us = trajectory_start_time;
 
     // Switch between control modes based on target velocities in each axis
-
     float left_right_target_velocity =
         cur_trajectory.v_target * cos(cur_trajectory.angle);
     float up_down_target_velocity =
         cur_trajectory.v_target * sin(cur_trajectory.angle);
-
-    // Serial.println("Angle: " + String(cur_trajectory.angle));
-    // Serial.println("Up Down target velocity: " +
-    //                String(up_down_target_velocity));
-    // Serial.println("Left Right target velocity: " +
-    //                String(left_right_target_velocity));
 
     // If less than velocity limit, but not zero
     if (abs(left_right_target_velocity) < OL_VELOCITY_LIMIT &&
@@ -699,7 +577,7 @@ void loop()
 
     // Serial.println("End time: " + String(cur_trajectory.end_time_delta_us));
 
-    replan_counter = 0;
+    foc_loops.store(0);
   }
 
   //   Update velocity commands based on current profile
@@ -731,53 +609,7 @@ void loop()
   left_right_acceleration_target.store(state.a.x);
   up_down_acceleration_target.store(state.a.y);
 
-  //   Print target velocity and true velocity on one line
-  //   freq_println("Target: " + String(state.v.x, 5) + ", " +
-  //   String(state.v.y, 5) +
-  //                    ", " + String(left_right.get_velocity(), 5) + ", " +
-  //                    String(up_down.get_velocity(), 5),
-  //                60);
-
-  //   Print position and velocity on one line
-  //   Serial.println("Position: " + String(left_right.get_position(),
-  //   5) + "\t"
-  //   +
-  //                  String(up_down.get_position(), 5) + "\t" +
-  //                  String(left_right.get_velocity(), 5) + "\t" +
-  //                  String(up_down.get_velocity(), 5) + "\t" +
-  //                  String(state.v.x, 5) + "\t" + String(state.v.y,
-  //                  5));
-  //     +
-  //                    String(up_down.get_position(), 5) + ", " +
-  //                    String(left_right.get_velocity(), 5) + ", " +
-  //                    String(up_down.get_velocity(), 5) + ", " +
-  //                    String(state.v.x, 5) + ", " + String(state.v.y,
-  //                    5));
-
   previous_velocity_x = state.v.x;
   previous_velocity_y = state.v.y;
 
-  //   +- 2 rads of error
-
-  //   fake_velocity_x = state.v.x + 0.2 * (float)rand() / RAND_MAX - 0.1;
-  //   fake_velocity_y = state.v.y + 0.2 * (float)rand() / RAND_MAX - 0.1;
-
-  //   //   Print fake velocity on one line
-  //   Serial.println("Fake Velocity: " + String(fake_velocity_x, 5) + ", " +
-  //                  String(fake_velocity_y, 5) + ", " );
-
-  replan_counter++;
-
-  if (parser->is_complete() && !printed)
-  {
-    // If we've completed all commands, print "DONE" and set printed to true
-    Serial.println("DONE");
-    Serial.println("Total Time: " + String((micros() - start_time) / 1e6) +
-                   " s");
-    left_right.disable();
-    up_down.disable();
-    printed = true;
-  }
-
-  //   webSocket.loop();  // Handle WebSocket events
 }
