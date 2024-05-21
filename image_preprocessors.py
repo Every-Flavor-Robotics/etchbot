@@ -5,7 +5,7 @@ from click import secho
 
 from PIL import Image
 
-import cv2
+from rembg import remove
 
 
 class ImagePreprocessor(ABC):
@@ -345,6 +345,88 @@ class BlackAndWhitePreprocessor(ImagePreprocessor):
 
         # Save the black and white image
         image.save(output_path)
+
+        # Confirm that the output image exists
+        if not output_path.exists():
+            raise FileNotFoundError(
+                f"Output image {output_path} not generated correctly."
+            )
+
+
+class RemBGPreprocessor(ImagePreprocessor):
+    """RemBG Preprocessor removes the background from the input image."""
+
+    PATH_TO_BACKGROUND_REMOVER = "backgroundremover"
+
+    def process(self, image_path: Path, output_path: Path) -> None:
+        """Process the input image and return the output image.
+
+        Args:
+            image_path (Path): Path to the raw image to be processed
+            output_path (Path): Path to save the processed image
+
+        Returns: None
+        """
+
+        super().process(image_path, output_path)
+
+        # Confirm that the input image exists
+        if not image_path.exists():
+            raise FileNotFoundError(f"Image {image_path} not found.")
+
+        command = f"{self.PATH_TO_BACKGROUND_REMOVER} -i {image_path} -o {output_path}"
+
+        # Run the command
+        try:
+            subprocess.run(command, check=True, shell=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Preprocessor execution failed: {e}") from e
+
+        # Confirm that the output image exists
+        if not output_path.exists():
+            raise FileNotFoundError(
+                f"Output image {output_path} not generated correctly."
+            )
+
+
+class CartoonifyPreProcessor(ImagePreprocessor):
+    """Cartoonify Preprocessor converts the input image to a cartoon-like image.
+
+    https://github.com/ahmedbesbes/cartoonify
+
+    """
+
+    PATH_TO_CARTOONIFY = "~/efr/cartoonify/cartoongan/etch_a_sketch_demo.py"
+
+    def process(self, image_path: Path, output_path: Path) -> None:
+        """Process the input image and return the output image.
+
+        Args:
+            image_path (Path): Path to the raw image to be processed
+            output_path (Path): Path to save the processed image
+
+        Returns: None
+        """
+
+        super().process(image_path, output_path)
+
+        # Confirm that the input image exists
+        if not image_path.exists():
+            raise FileNotFoundError(f"Image {image_path} not found.")
+
+        # Load the image
+        image = Image.open(image_path)
+
+        args = f"--input_path {image_path} --output_path {output_path}"
+
+        # Construct the command to run the Cartoonify preprocessor
+        command = f"python {self.PATH_TO_CARTOONIFY} {args}"
+
+        # Run the command
+        try:
+            subprocess.run(command, check=True, shell=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Preprocessor execution failed: {e}") from e
 
         # Confirm that the output image exists
         if not output_path.exists():
