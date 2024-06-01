@@ -26,7 +26,7 @@ Here are the links to the open-source projects this codebase relies on.
 * [cartoonify](https://github.com/ahmedbesbes/cartoonify) | [Our Fork](https://github.com/Every-Flavor-Robotics/cartoonify)
 * [gcode-optimizer](https://github.com/andrewhodel/gcode-optimizer) | [Our Fork](https://github.com/Every-Flavor-Robotics/gcode-optimizer)
 * [rembg](https://github.com/danielgatis/rembg)
-* [potrace](https://github.com/danielgatis/rembg)
+* [potrace](https://potrace.sourceforge.net) | [GitHub mirror](https://github.com/skyrpex/potrace)
 * [ColoringPags](https://github.com/eurashin/ColoringPags)
 * [Coherent-Line-Drawing](https://github.com/SSARCandy/Coherent-Line-Drawing)
 
