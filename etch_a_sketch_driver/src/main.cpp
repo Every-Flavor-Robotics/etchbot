@@ -11,6 +11,7 @@
 #include "common/pid.h"
 #include "configurable.h"
 #include "gcode.h"
+#include "motor_definitions.h"
 #include "pid_manager.h"
 #include "planner.h"
 #include "web_server.h"
@@ -32,11 +33,12 @@ typedef union
 } data_packet_t;
 
 //  Conversion from mm to radians
-#define GEAR_RATIO 30.0 / 66.0  // Motor to knob
+// #define GEAR_RATIO 30.0 / 66.0  // Motor to knob
+#define GEAR_RATIO 1 / 2.66666666667  // Motor to knob
 #define RAD_PER_MM 0.1858 / (GEAR_RATIO)
 #define MMPERMIN_TO_RADPERSEC RAD_PER_MM / 60.0
-#define ACCELERATION 10000
-#define MAX_ACCELERATION 20000
+#define ACCELERATION 16000
+#define MAX_ACCELERATION 25000
 // mm * RAD_PER_MM = rad
 #define ERROR_TOLERANCE 1.0 * RAD_PER_MM
 
@@ -44,8 +46,6 @@ typedef union
 // #define OL_VELOCITY_LIMIT 15
 float OL_VELOCITY_LIMIT = 0;
 size_t replan_horizon = 1;
-
-// float FEEDRATE = 8000;
 
 #define X_LIM 130
 #define Y_LIM 89.375
@@ -79,8 +79,8 @@ PIDController up_down_velocity_pid(up_down_velocity_pid_params.p,
                                    up_down_velocity_pid_params.d,
                                    up_down_velocity_pid_params.output_ramp,
                                    up_down_velocity_pid_params.limit);
-LowPassFilter left_right_velocity_lpf(0.003);
-LowPassFilter up_down_velocity_lpf(0.003);
+LowPassFilter left_right_velocity_lpf(0.00);
+LowPassFilter up_down_velocity_lpf(0.00);
 
 MotorGo::PIDParameters planner_lpf_params;
 LowPassFilter planner_left_right_velocity_lpf(0.000);
@@ -88,6 +88,8 @@ LowPassFilter planner_up_down_velocity_lpf(0.000);
 
 // declare PID manager object
 MotorGo::PIDManager pid_manager;
+
+// Motor definitions
 
 std::atomic<float> up_down_velocity_target(0.0);
 std::atomic<float> left_right_velocity_target(0.0);
@@ -187,42 +189,33 @@ void setup()
   Serial.begin(5000000);
   delay(3000);
 
-  MotorGo::MotorConfiguration motor_config;
-  motor_config.pole_pairs = 11;
-  motor_config.phase_resistance = 0.1;
-  motor_config.kv = 500;
-  motor_config.current_limit = 10.0;
-  motor_config.voltage_limit = 1.6;
-  motor_config.velocity_limit = 300;
-  motor_config.calibration_voltage = 0.9;
-
   // Setup motor parameters
-  config_ch0.motor_config = motor_config;
-  config_ch0.power_supply_voltage = 17.0;
+  config_ch0.motor_config = GARTTLeftTronix;
+  config_ch0.power_supply_voltage = 12.0;
   config_ch0.reversed = false;
 
-  config_ch1.motor_config = motor_config;
-  config_ch1.power_supply_voltage = 17.0;
+  config_ch1.motor_config = GARTTRightTronix;
+  config_ch1.power_supply_voltage = 12.0;
   config_ch1.reversed = false;
 
-  left_right_velocity_pid_params.p = 0.26;
+  left_right_velocity_pid_params.p = 0.295;
   left_right_velocity_pid_params.i = 0.0;
   left_right_velocity_pid_params.d = 0.0;
   left_right_velocity_pid_params.lpf_time_constant = 0.00;
-  left_right_ff_accel_gain = 0.04 / 100;
-  left_right_ff_velocity_gain = 0.025;
+  left_right_ff_accel_gain = 0.021 / 100;
+  left_right_ff_velocity_gain = 0.011;
 
   left_right_velocity_pid.P = left_right_velocity_pid_params.p;
   left_right_velocity_pid.I = 0;
   left_right_velocity_pid.D = 0;
   left_right_velocity_lpf.Tf = left_right_velocity_pid_params.lpf_time_constant;
 
-  up_down_velocity_pid_params.p = 0.26;
+  up_down_velocity_pid_params.p = 0.295;
   up_down_velocity_pid_params.i = 0.0;
   up_down_velocity_pid_params.d = 0.0;
   up_down_velocity_pid_params.lpf_time_constant = 0.00;
-  up_down_ff_accel_gain = 0.04 / 100;
-  up_down_ff_velocity_gain = 0.025;
+  up_down_ff_accel_gain = 0.011 / 100;
+  up_down_ff_velocity_gain = 0.021;
 
   up_down_velocity_pid.P = up_down_velocity_pid_params.p;
   up_down_velocity_pid.I = 0;
@@ -362,8 +355,10 @@ void loop_foc(void* pvParameters)
     float local_ud_accel_target = up_down_acceleration_target.load();
 
     // Update LPFs
-    float lr_velocity = left_right_velocity_lpf(left_right.get_velocity());
-    float ud_velocity = up_down_velocity_lpf(up_down.get_velocity());
+    // float lr_velocity = left_right_velocity_lpf(left_right.get_velocity());
+    // float ud_velocity = up_down_velocity_lpf(up_down.get_velocity());
+    float lr_velocity = left_right.get_velocity();
+    float ud_velocity = up_down.get_velocity();
 
     float left_right_gain = 1.0;
     if (lr_velocity < 0.01)
@@ -434,6 +429,7 @@ unsigned long previous_loop_time = 0;
 unsigned long last_loop_time = 0;
 bool first = true;
 
+int parser_test = 0;
 void loop()
 {
   // Safety conditions
@@ -468,21 +464,9 @@ void loop()
         if (first)
         {
           first = false;
+          Serial.println("Waiting to preprocess all data");
           vTaskDelay(3000 / portTICK_PERIOD_MS);
         }
-
-        // Print command
-        // Serial.println("Command: " + String(current_command.x) + ", " +
-        //                String(current_command.y) + ", " +
-        //                String(current_command.feedrate));
-
-        // Serial.println("Next command ready");
-        // while (digitalRead(0))
-        // {
-        //   delay(100);
-        // }
-        // delay(1000);
-        // Serial.println("Starting next");
       }
     }
   }
@@ -520,63 +504,6 @@ void loop()
         Planner::generate_trapezoid_profile(profile, ERROR_TOLERANCE);
     cur_trajectory.start_time_us = trajectory_start_time;
 
-    // Switch between control modes based on target velocities in each axis
-    float left_right_target_velocity =
-        cur_trajectory.v_target * cos(cur_trajectory.angle);
-    float up_down_target_velocity =
-        cur_trajectory.v_target * sin(cur_trajectory.angle);
-
-    // If less than velocity limit, but not zero
-    if (abs(left_right_target_velocity) < OL_VELOCITY_LIMIT &&
-        abs(left_right_target_velocity) > 1)
-    {
-      //   Serial.println("Left_right: Switching to OL mode");
-      left_right.set_control_mode(MotorGo::ControlMode::VelocityOpenLoop);
-      left_right_ol_mode.store(true);
-    }
-    else
-    {
-      //   Serial.println("Left_right: Switching to CL mode");
-      left_right.set_control_mode(MotorGo::ControlMode::Voltage);
-      left_right_ol_mode.store(false);
-    }
-    if (abs(up_down_target_velocity) < OL_VELOCITY_LIMIT &&
-        abs(up_down_target_velocity) > 0.0001)
-    {
-      //   Serial.println("Up_down: Switching to OL mode");
-      up_down.set_control_mode(MotorGo::ControlMode::VelocityOpenLoop);
-      up_down_ol_mode.store(true);
-    }
-    else
-    {
-      //   Serial.println("Up_down: Switching to CL mode");
-      up_down.set_control_mode(MotorGo::ControlMode::Voltage);
-      up_down_ol_mode.store(false);
-    }
-    // Serial.println("Command: " + String(command.x) + ", " +
-    //                String(command.y) + ", " + String(command.feedrate));
-    // // Print all profile parameters
-    // Serial.println("Profile parameters:");
-    // Serial.println("Initial position: " + String(profile.x_initial) + ","
-    // +
-    //                String(profile.y_initial));
-    // Serial.println("Final position: " + String(profile.x_final) + "," +
-    //                String(profile.y_final));
-
-    // Serial.println("Initial velocity: " + String(profile.v_initial));
-    // Serial.println("Target velocity:" + String(profile.v_target));
-    // Serial.println("Final velocity: " + String(profile.v_final));
-    // Serial.println("Acceleration: " + String(profile.a_target));
-
-    // Serial.println("Accel time: " +
-    //                String(cur_trajectory.acceleration_time_delta_us));
-    // Serial.println("Coast time: " +
-    //                String(cur_trajectory.coast_end_time_delta_us));
-    // Serial.println("Decel time: " +
-    // String(cur_trajectory.end_time_delta_us));
-
-    // Serial.println("End time: " + String(cur_trajectory.end_time_delta_us));
-
     foc_loops.store(0);
   }
 
@@ -611,5 +538,4 @@ void loop()
 
   previous_velocity_x = state.v.x;
   previous_velocity_y = state.v.y;
-
 }
