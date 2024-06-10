@@ -82,7 +82,7 @@ Planner::TrapezoidVelocityTrajectory Planner::generate_trapezoid_profile(
     // Confirm that the distance is long enough to reach the target velocity
     if (d_total < d_accel + d_decel)
     {
-      Serial.println("Distance is too short to reach target velocity");
+      //   Serial.println("Distance is too short to reach target velocity");
       // Compute a new target velocity that can be reached
       // v_t^2 = ad + 0.5 * v_i^2 + 0.5 * v_f^2
       args.v_target =
