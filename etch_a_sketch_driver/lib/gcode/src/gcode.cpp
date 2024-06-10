@@ -80,7 +80,7 @@ void GCode::GCodeParser::parse_line(String line)
       default:
         //   For now, let's ignore unknown G-codes
         // Give a warning message
-        Serial.println("Skipping unknown G-code: " + gCodeStr);
+        // Serial.println("Skipping unknown G-code: " + gCodeStr);
         break;
     }
   }
@@ -226,13 +226,9 @@ void GCode::parser_thread(GCode::GCodeParser& parser)
 {
   while (!parser.is_stream_complete())
   {
-    // Print some debug information
-    // Serial.println(
-    //     "Current buffer size: " + String(parser.get_command_buffer_size()) +
-    //     " / " + String(parser.buffer_size));
     if (parser.get_command_buffer_size() < parser.buffer_size)
     {
-      // Get a line of GCode (from where? This part is up to you)
+      // Get a line of GCode
       String gcode_line = parser.get_next_gcode_line();
 
       // Parse Line
@@ -245,6 +241,12 @@ void GCode::parser_thread(GCode::GCodeParser& parser)
     }
 
     parser.loop();
+
+    // Check if the stream is completeq
+    if (parser.get_command_buffer_size() == 0)
+    {
+      parser.set_ready_for_next_gcode();
+    }
 
     // Reset the watchdog timer
     esp_task_wdt_reset();
@@ -298,6 +300,11 @@ bool GCode::GCodeParser::is_complete()
 }
 
 bool GCode::GCodeParser::is_stream_complete() { return stream->is_complete(); }
+
+void GCode::GCodeParser::set_ready_for_next_gcode()
+{
+  stream->set_ready_for_next_gcode();
+}
 
 bool GCode::GCodeParser::is_available()
 {
@@ -354,7 +361,7 @@ GCode::MotionCommandResult GCode::GCodeParser::pop_command_buffer()
 {
   MotionCommandResult result;
 
-  if (!acquire_lock())
+  if (!acquire_lock_no_timeout())
   {
     result.success = false;
     return result;
@@ -372,6 +379,7 @@ GCode::MotionCommandResult GCode::GCodeParser::pop_command_buffer()
   }
 
   release_lock();
+
   return result;
 }
 
@@ -381,7 +389,7 @@ bool GCode::GCodeParser::acquire_lock()
   bool acquired = lock_command_buffer.compare_exchange_strong(expected, true);
 
   // Try for a timeout period to acquire the lock
-  int timeout = 1000;  // Timeout in milliseconds
+  int timeout = 10;  // Timeout in milliseconds
   int elapsed_time = 0;
   while (!acquired && elapsed_time < timeout)
   {
@@ -391,6 +399,13 @@ bool GCode::GCodeParser::acquire_lock()
   }
 
   return acquired;
+}
+
+bool GCode::GCodeParser::acquire_lock_no_timeout()
+{
+  bool expected = false;
+
+  return lock_command_buffer.compare_exchange_strong(expected, true);
 }
 
 void GCode::GCodeParser::release_lock() { lock_command_buffer.store(false); }

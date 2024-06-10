@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WebSocketsServer.h>
+#include <esp_system.h>
 #include <esp_task_wdt.h>
 #include <motorgo_mini.h>
 
@@ -161,6 +162,9 @@ void home()
 
   disable_flag = true;
   delay(1000);
+
+  esp_restart();
+
   while (!motors_enabled)
   {
     delay(100);
@@ -214,8 +218,8 @@ void setup()
   up_down_velocity_pid_params.i = 0.0;
   up_down_velocity_pid_params.d = 0.0;
   up_down_velocity_pid_params.lpf_time_constant = 0.00;
-  up_down_ff_accel_gain = 0.011 / 100;
-  up_down_ff_velocity_gain = 0.021;
+  up_down_ff_accel_gain = 0.021 / 100;
+  up_down_ff_velocity_gain = 0.011;
 
   up_down_velocity_pid.P = up_down_velocity_pid_params.p;
   up_down_velocity_pid.I = 0;
@@ -314,8 +318,8 @@ void setup()
 
   left_right.zero_position();
   up_down.zero_position();
-  left_right.enable();
-  up_down.enable();
+  //   left_right.enable();
+  //   up_down.enable();
   //   home();
   state.is_complete = true;
 }
@@ -420,7 +424,14 @@ void loop_foc(void* pvParameters)
 Planner::TrapezoidVelocityTrajectory cur_trajectory;
 float last_final_x = 0;
 float last_final_y = 0;
-GCode::MotionCommand current_command;
+GCode::MotionCommand command1;
+GCode::MotionCommand command2;
+
+// Add pointers to the current and next command
+GCode::MotionCommand* current_command = &command1;
+bool next_command_ready = false;
+GCode::MotionCommand* next_command = &command2;
+GCode::MotionCommand* temp_command;
 
 float previous_velocity_x = 0;
 float previous_velocity_y = 0;
@@ -442,32 +453,25 @@ void loop()
     disable_flag = true;
   }
 
-  if (state.is_complete && parser->is_available())
+  if (state.is_complete && next_command_ready)
   {
-    // Retrieve next command
-    GCode::MotionCommandResult result = parser->pop_command_buffer();
-    // If the command was successfully retrieved
-    if (result.success)
+    // Swap the pointers
+    temp_command = current_command;
+    current_command = next_command;
+    next_command = temp_command;
+    next_command_ready = false;
+
+    //   Ignore the rest of the command, run the homing procedure
+    if (current_command->home)
     {
-      current_command = result.command;
-      //   Ignore the rest of the command, run the homing procedure
-      if (current_command.home)
-      {
-        home();
-      }
-      //   Otherwise, generate a trapezoid profile
-      else
-      {
-        // Force a replan when we have a new command
-        foc_loops.store(replan_horizon);
-        state.is_complete = false;
-        if (first)
-        {
-          first = false;
-          Serial.println("Waiting to preprocess all data");
-          vTaskDelay(3000 / portTICK_PERIOD_MS);
-        }
-      }
+      home();
+    }
+    //   Otherwise, generate a trapezoid profile
+    else
+    {
+      // Force a replan when we have a new command
+      foc_loops.store(replan_horizon);
+      state.is_complete = false;
     }
   }
 
@@ -484,9 +488,9 @@ void loop()
     profile.y_initial = up_down.get_position();
 
     profile.x_final =
-        constrain(current_command.x * RAD_PER_MM, 0, X_LIM * RAD_PER_MM);
+        constrain(current_command->x * RAD_PER_MM, 0, X_LIM * RAD_PER_MM);
     profile.y_final =
-        constrain(current_command.y * RAD_PER_MM, 0, Y_LIM * RAD_PER_MM);
+        constrain(current_command->y * RAD_PER_MM, 0, Y_LIM * RAD_PER_MM);
 
     // Compute current velocity magnitude
     float current_velocity =
@@ -495,7 +499,7 @@ void loop()
     // For now, fix initial and final velocities to 0
     profile.v_initial = current_velocity;
     profile.v_final = 0;
-    profile.v_target = current_command.feedrate * MMPERMIN_TO_RADPERSEC;
+    profile.v_target = current_command->feedrate * MMPERMIN_TO_RADPERSEC;
     profile.a_target = ACCELERATION;
 
     last_final_x = profile.x_final;
@@ -538,4 +542,30 @@ void loop()
 
   previous_velocity_x = state.v.x;
   previous_velocity_y = state.v.y;
+
+  if (!next_command_ready && parser->is_available())
+  {
+    // Retrieve next command
+    GCode::MotionCommandResult result = parser->pop_command_buffer();
+    // If the command was successfully retrieved
+    if (result.success)
+    {
+      // Copy data to the next command
+      next_command->x = result.command.x;
+      next_command->y = result.command.y;
+      next_command->z = result.command.z;
+      next_command->feedrate = result.command.feedrate;
+      next_command->home = result.command.home;
+      next_command_ready = true;
+
+      if (first)
+      {
+        first = false;
+        Serial.println("Waiting to preprocess all data");
+        vTaskDelay(3000 / portTICK_PERIOD_MS);
+        left_right.enable();
+        up_down.enable();
+      }
+    }
+  }
 }

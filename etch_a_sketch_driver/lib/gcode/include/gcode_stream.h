@@ -26,6 +26,8 @@ class GCodeStream
 
   // Read a line from the stream
   virtual String read_line() = 0;
+
+  virtual void set_ready_for_next_gcode() = 0;
 };
 
 class VectorGCodeStream : public GCodeStream

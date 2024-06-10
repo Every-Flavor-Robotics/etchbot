@@ -83,11 +83,15 @@ class GCodeParser
   MotionCommandResult peek_command_buffer();
   MotionCommandResult pop_command_buffer();
 
+  void set_ready_for_next_gcode();
+
  private:
   std::queue<MotionCommand> motion_command_buffer;
   std::atomic<bool> lock_command_buffer;
 
   bool acquire_lock();
+  bool acquire_lock_no_timeout();
+
   void release_lock();
 
   // Internal state variables
