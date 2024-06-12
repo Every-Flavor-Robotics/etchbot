@@ -58,9 +58,9 @@ class GCodeFilter(ABC):
             args[key] = value
         return command, args
 
+
 class GCodeCleaner(GCodeFilter):
-    """GCodeCleaner removes comments and empty lines from the GCode file.
-    """
+    """GCodeCleaner removes comments and empty lines from the GCode file."""
 
     def __init__(self):
         """Initialize the GCodeCleaner."""
@@ -93,8 +93,9 @@ class GCodeCleaner(GCodeFilter):
         with open(output_path, "w") as f:
             f.writelines(new_lines)
 
+
 class RemoveZ(GCodeFilter):
-    """ RemoveZ removes the Z axis from the GCode file.
+    """RemoveZ removes the Z axis from the GCode file.
 
     If a command only has a Z axis, it will be removed completely. If a command has an X, Y, and Z axis, the Z axis
     will be removed.
@@ -127,10 +128,10 @@ class RemoveZ(GCodeFilter):
             if "Z" in args:
                 del args["Z"]
                 # Remove F it is the only argument after Z
-                if("F" in args and len(args) == 1):
+                if "F" in args and len(args) == 1:
                     del args["F"]
 
-            if(len(args) > 0):
+            if len(args) > 0:
                 new_line = f"{command} "
                 for key, value in args.items():
                     new_line += f"{key}{value} "
@@ -140,6 +141,7 @@ class RemoveZ(GCodeFilter):
 
         with open(output_path, "w") as f:
             f.writelines(new_lines)
+
 
 class LoopCloser(GCodeFilter):
     """LoopCloser closes loops in the GCode file.
@@ -387,7 +389,7 @@ class TSPOptimizer(GCodeFilter):
     solver must be installed on the system and available in the PATH.
     """
 
-    OPTIMIZER_PATH = "~/efr/gcode-optimizer/main.py"
+    OPTIMIZER_PATH = "~/efr/gcode-optimizer/rust_optimizer.py"
 
     def __init__(self):
         """Initialize the TSPOptimizer."""

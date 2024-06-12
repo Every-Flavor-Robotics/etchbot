@@ -5,9 +5,33 @@ import click
 import threading
 import socket
 from flask import Flask, jsonify
+from filelock import FileLock, Timeout
 
 gcode_buffer = []
 buffer_lock = threading.Lock()
+
+status_UNKNOWN = "UNKNOWN"
+status_READY = "READY"
+status_DRAWING = "DRAWING"
+status_ERROR = "ERROR"
+cur_status = status_UNKNOWN
+
+
+def write_robot_status(status):
+    global cur_status
+    if status == cur_status:
+        return
+
+    cur_status = status
+    while True:
+        try:
+            with FileLock("robot_status.txt.lock"):
+                with open("robot_status.txt", "w") as f:
+                    f.write(status)
+        except Timeout:
+            print("Failed to acquire lock on robot_status.txt")
+
+        break
 
 
 class GCode:
@@ -53,9 +77,11 @@ class GCodeRequestHandler(socketserver.StreamRequestHandler):
     start_line = 0
 
     def handle(self):
-        global gcode_buffer, buffer_lock
+        global gcode_buffer, buffer_lock, status_READY, status_DRAWING, status_ERROR
 
         print("Connected by", self.client_address)
+
+        write_robot_status(status_DRAWING)
 
         with buffer_lock:
             if len(gcode_buffer) == 0:
@@ -91,6 +117,8 @@ class GCodeRequestHandler(socketserver.StreamRequestHandler):
             gcode.reset()
             with buffer_lock:
                 gcode_buffer.insert(0, gcode)
+
+            write_robot_status(status_ERROR)
 
         except (ConnectionResetError, BrokenPipeError):
             print("Connection closed by client. Will retry this gcode next time")
@@ -147,6 +175,7 @@ def gcode_available():
             return "", 200
         else:
             print("Returng 204")
+            write_robot_status(status_READY)
             return "", 204
 
 
