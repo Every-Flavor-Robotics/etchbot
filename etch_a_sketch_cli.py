@@ -1,6 +1,14 @@
+import numpy as np
+import os
+
+os.environ["MKL_THREADING_LAYER"] = "INTEL"
+os.environ["MKL_SERVICE_FORCE_INTEL"] = "1"
+
 import pathlib
 import shutil
 import click
+import time
+
 
 from image_preprocessors import (
     ColorbookPreprocessor,
@@ -9,6 +17,7 @@ from image_preprocessors import (
     BlackAndWhitePreprocessor,
     RemBGPreprocessor,
     CartoonifyPreProcessor,
+    InformativeDrawingsPreprocessor,
 )
 from vectorizers import PotraceVectorizer
 from gcode_generators import Svg2GcodeGenerator
@@ -20,6 +29,8 @@ from gcode_filters import (
     RemoveZ,
 )
 
+counter = 0
+
 
 def run_pipeline(
     input_file: pathlib.Path,
@@ -27,6 +38,7 @@ def run_pipeline(
     copy: bool = False,
     skip_preprocessing: bool = False,
 ):
+    global counter
     # Print in green, processing the input file
     click.secho(f"Processing {input_file}...", fg="green")
 
@@ -45,9 +57,11 @@ def run_pipeline(
         # ]
 
     preprocessors = [
+        RemBGPreprocessor(),
         AspectRatioPreprocessor(16 / 11),
-        CartoonifyPreProcessor(),
-        ColorbookPreprocessor(),
+        # CartoonifyPreProcessor(),
+        InformativeDrawingsPreprocessor(),
+        # ColorbookPreprocessor(),
         BlackAndWhitePreprocessor(),
     ]
     vectorizers = [PotraceVectorizer()]
@@ -89,6 +103,15 @@ def run_pipeline(
             preprocessor.process(input_file, output_dir / "preprocessed.png")
             input_file = output_dir / "preprocessed.png"
 
+            # Create a copy of the preprocessed image
+            shutil.copy(
+                input_file,
+                output_dir
+                / f"step_{counter}_preprocessed_{type(preprocessor).__name__}.png",
+            )
+            counter += 1
+            time.sleep(0.1)
+
         # Print in green, processing complete
         click.secho(f"Pre-Processing complete!", fg="green")
     if not input_file.suffix in [".jpg", ".jpeg", ".png"]:
@@ -101,6 +124,14 @@ def run_pipeline(
             # Process the preprocessed image
             vectorizer.process(input_file, output_dir / "vectorized.svg")
             input_file = output_dir / "vectorized.svg"
+
+            # Create a copy of the preprocessed image
+            shutil.copy(
+                input_file,
+                output_dir
+                / f"step_{counter}_preprocessed_{type(vectorizer).__name__}.svg",
+            )
+            counter += 1
 
         # Print in green, processing complete
         click.secho(f"Vectorizing complete!", fg="green")
@@ -116,6 +147,14 @@ def run_pipeline(
 
             input_file = output_dir / "output.gcode"
 
+            # Create a copy of the preprocessed image
+            shutil.copy(
+                input_file,
+                output_dir
+                / f"step_{counter}_preprocessed_{type(gcode_converter).__name__}.gcode",
+            )
+            counter += 1
+
         # Print in green, processing complete
         click.secho(f"Converting to G-code complete!", fg="green")
 
@@ -130,6 +169,18 @@ def run_pipeline(
 
             input_file = output_dir / "output.gcode"
 
+            shutil.copy(
+                input_file,
+                output_dir
+                / f"step_{counter}_preprocessed_{type(gcode_filter).__name__}.gcode",
+            )
+            counter += 1
+
+    # Finally, move the final gcode to final.gcode
+    shutil.copy(
+        input_file,
+        output_dir / "final.gcode",
+    )
     return input_file
 
 
