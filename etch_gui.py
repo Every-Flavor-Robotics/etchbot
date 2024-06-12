@@ -142,8 +142,25 @@ def draw_ready_screen(
         frame_resized, (center_x - camera_width // 2, center_y - camera_height // 2)
     )
 
+     #Button placement and dimensions
+    button_width = 150
+    button_height = 50
+    button_x = center_x - button_width // 2
+    button_y = center_y + camera_height // 2 + 20  # 20 pixels below the frame
+
+
+    # Button drawing and text
+    button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+    pygame.draw.rect(window, primary, button_rect)
+    text_surface = font.render("Take Photo!", True, (255, 255, 255))
+    text_rect = text_surface.get_rect(center=button_rect.center)
+    window.blit(text_surface, text_rect)
+
     # Check if space bar is release
     for event in events:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1: # Left mouse button
+            if button_rect.collidepoint(event.pos):
+                return SM_SUCCESS, frame
         if event.type == pygame.KEYUP and event.key == pygame.K_SPACE:
             return SM_SUCCESS, frame
 
