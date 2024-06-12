@@ -1,11 +1,15 @@
+import numpy as np
+
 import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
+
 from click import secho
 
 from PIL import Image
 
 from rembg import remove
+from filelock import FileLock, Timeout
 
 
 class ImagePreprocessor(ABC):
@@ -74,8 +78,14 @@ class AspectRatioPreprocessor(ImagePreprocessor):
             # Crop the center of the image to the correct aspect ratio
             image = self.crop_center(image)
 
-        # Save the cropped image
-        image.save(output_path)
+        while True:
+            try:
+                with FileLock(output_path.with_suffix(".lock"), timeout=1):
+                    # Save the cropped image
+                    image.save(output_path)
+                    break
+            except:
+                pass
 
         # Confirm that the output image exists
         if not output_path.exists():
@@ -163,7 +173,15 @@ class ColorbookPreprocessor(ImagePreprocessor):
 
         # Transfer outlined.png to the output directory
         outlined_path = output_temp_dir / "outlined.png"
-        subprocess.run(f"mv {outlined_path} {output_path}", check=True, shell=True)
+        while True:
+            try:
+                with FileLock(output_path.with_suffix(".lock"), timeout=1):
+                    subprocess.run(
+                        f"mv {outlined_path} {output_path}", check=True, shell=True
+                    )
+                    break
+            except Timeout:
+                pass
 
         # Confirm that the output image exists
         if not output_path.exists():
@@ -254,20 +272,27 @@ class CoherentLineDrawingPreprocessor(ImagePreprocessor):
         command = f"{self.COHERENT_LINE_DRAWING_PATH} {self.construct_args(args)}"
 
         # Run the command
-        try:
-            subprocess.run(command, check=True, shell=True)
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Preprocessor execution failed: {e}") from e
+        while True:
+            try:
+                with FileLock(output_path.with_suffix(".lock"), timeout=1):
+                    try:
+                        subprocess.run(command, check=True, shell=True)
+                    except subprocess.CalledProcessError as e:
+                        raise RuntimeError(f"Preprocessor execution failed: {e}") from e
 
-        # Confirm that the output image exists
-        if not output_path.exists():
-            raise FileNotFoundError(
-                f"Output image {output_path} not generated correctly."
-            )
+                    # Confirm that the output image exists
+                    if not output_path.exists():
+                        raise FileNotFoundError(
+                            f"Output image {output_path} not generated correctly."
+                        )
 
-        # Open the image and convert to grayscale
-        image = Image.open(output_path).convert("L")
-        image.save(output_path)
+                    # Open the image and convert to grayscale
+                    image = Image.open(output_path).convert("L")
+                    image.save(output_path)
+
+                    break
+            except:
+                pass
 
 
 class DeNoisePreprocessor(ImagePreprocessor):
@@ -303,8 +328,15 @@ class DeNoisePreprocessor(ImagePreprocessor):
         # Remove noise from the image
         image = self.de_noise(image)
 
-        # Save the de-noised image
-        image.save(output_path)
+        while True:
+            try:
+                with FileLock(output_path.with_suffix(".lock"), timeout=1):
+                    # Save the de-noised image
+                    image.save(output_path)
+
+                    break
+            except:
+                pass
 
         # Confirm that the output image exists
         if not output_path.exists():
@@ -343,8 +375,15 @@ class BlackAndWhitePreprocessor(ImagePreprocessor):
         # Convert the image to black and white
         image = image.convert("L")
 
-        # Save the black and white image
-        image.save(output_path)
+        while True:
+            try:
+                with FileLock(output_path.with_suffix(".lock"), timeout=1):
+                    # Save the black and white image
+                    image.save(output_path)
+
+                    break
+            except:
+                pass
 
         # Confirm that the output image exists
         if not output_path.exists():
@@ -433,3 +472,156 @@ class CartoonifyPreProcessor(ImagePreprocessor):
             raise FileNotFoundError(
                 f"Output image {output_path} not generated correctly."
             )
+
+
+class CoherentLineDrawingPreprocessor(ImagePreprocessor):
+    """This preprocessor generates a line drawing using the algorithm proposed in "Coherent Line Drawing" (Kang et al)
+
+    Code at: https://github.com/SSARCandy/Coherent-Line-Drawing
+    """
+
+    COHERENT_LINE_DRAWING_PATH = "~/efr/Coherent-Line-Drawing/build/cld"
+
+    def __init__(
+        self,
+        etf_kernel: int = 5,
+        sigma_c: float = 0.361,
+        sigma_m: float = 4.0,
+        tau: float = 0.9,
+        rho: float = 0.997,
+        etf_iterations: int = 1,
+        cld_iterations: int = 1,
+    ):
+        """Initialize the Coherent Line Drawing Preprocessor with the parameters.
+
+        Args:
+            etf_kernel (int): Size of the edge tangent flow kernel
+            sigma_c (float): Line width
+            sigma_m (float): Degree of coherence
+            tau (float): Thresholding
+            rho (float): Noise
+        """
+
+        self.etf_kernel = etf_kernel
+        self.sigma_c = sigma_c
+        self.sigma_m = sigma_m
+        self.tau = tau
+        self.rho = rho
+        self.etf_iterations = etf_iterations
+        self.cld_iterations = cld_iterations
+
+    def construct_args(self, args: dict) -> str:
+        """Construct the arguments for the Coherent Line Drawing preprocessor.
+
+        Args:
+            args (dict): Dictionary of arguments for the preprocessor
+
+        Returns:
+            str: Arguments for the preprocessor in the correct format
+        """
+
+        args_str = " ".join([f"{key} {value}" for key, value in args.items()])
+
+        return args_str
+
+    def process(self, image_path: Path, output_path: Path) -> None:
+        """Process the input image and return the output image.
+
+        Args:
+            image_path (Path): Path to the raw image to be processed
+            output_path (Path): Path to save the processed image
+
+        Returns: None
+        """
+
+        super().process(image_path, output_path)
+
+        # Construct args
+        args = {
+            "--ETF_kernel": self.etf_kernel,
+            "--sigma_c": self.sigma_c,
+            "--sigma_m": self.sigma_m,
+            "--tau": self.tau,
+            "--rho": self.rho,
+            "--ETF_iter": self.etf_iterations,
+            "--CLD_iter": self.cld_iterations,
+            "--output": output_path,
+            "--src": image_path,
+        }
+
+        # Construct the command to run the Coherent Line Drawing preprocessor
+        command = f"{self.COHERENT_LINE_DRAWING_PATH} {self.construct_args(args)}"
+
+        # Run the command
+        while True:
+            try:
+                with FileLock(output_path.with_suffix(".lock"), timeout=1):
+                    try:
+                        subprocess.run(command, check=True, shell=True)
+                    except subprocess.CalledProcessError as e:
+                        raise RuntimeError(f"Preprocessor execution failed: {e}") from e
+
+                    # Confirm that the output image exists
+                    if not output_path.exists():
+                        raise FileNotFoundError(
+                            f"Output image {output_path} not generated correctly."
+                        )
+
+                    # Open the image and convert to grayscale
+                    image = Image.open(output_path).convert("L")
+                    image.save(output_path)
+
+                    break
+            except:
+                pass
+
+
+class InformativeDrawingsPreprocessor(ImagePreprocessor):
+    """Informative Drawings Preprocessor generates informative drawings from the input image."""
+
+    PATH_TO_INFORMATIVE_DRAWINGS = "~/efr/informative-drawings/run_etch.py"
+
+    def process(self, image_path: Path, output_path: Path) -> None:
+        """Process the input image and return the output image.
+
+        Args:
+            image_path (Path): Path to the raw image to be processed
+            output_path (Path): Path to save the processed image
+
+        Returns: None
+        """
+
+        super().process(image_path, output_path)
+
+        # Confirm that the input image exists
+        if not image_path.exists():
+            raise FileNotFoundError(f"Image {image_path} not found.")
+
+        # Load the image
+        image = Image.open(image_path)
+
+        args = (
+            f"--input_file {image_path} --output_file {output_path} --name anime_style"
+        )
+
+        # Construct the command to run the Informative Drawings preprocessor
+        command = f"python {self.PATH_TO_INFORMATIVE_DRAWINGS} {args}"
+
+        while True:
+            try:
+                with FileLock(output_path.with_suffix(".lock"), timeout=1):
+                    # Run the command
+                    try:
+                        subprocess.run(command, check=True, shell=True)
+                    except subprocess.CalledProcessError as e:
+                        raise RuntimeError(f"Preprocessor execution failed: {e}") from e
+
+                    # Confirm that the output image exists
+                    if not output_path.exists():
+                        raise FileNotFoundError(
+                            f"Output image {output_path} not generated correctly."
+                        )
+
+                    break
+            except:
+                pass
