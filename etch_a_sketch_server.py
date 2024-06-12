@@ -6,6 +6,7 @@ from etch_a_sketch_cli import run_pipeline
 import threading
 import time
 import shutil
+import subprocess
 
 
 UPLOAD_DIR = Path("uploads")
@@ -39,11 +40,7 @@ def process_images():
             print("Processing image:", image_path)
             if image_path.suffix in [".jpg", ".jpeg", ".png"]:
                 processing_dir = PROCESSING_DIR / image_path.stem
-                processing_dir.mkdir()
-                run_pipeline(image_path, processing_dir, copy=True)
-
-                # Delete the image after processing
-                image_path.unlink()
+                run_pipeline(image_path, processing_dir, copy=False)
 
                 # Copy gcode to output directory, named input file name.gcode
                 gcode_path = processing_dir / "output.gcode"
@@ -51,6 +48,17 @@ def process_images():
                 shutil.copy(gcode_path, output_path)
 
         time.sleep(1)
+
+
+def gcode_server():
+    print("GCode server started.")
+    command = "python gcode_server.py --gcode_dir gcode_outputs"
+
+    subprocess.run(command, shell=True)
+
+    # Wait for the subprocess to finish
+    print("GCode server finished.")
+    time.sleep(1)
 
 
 if __name__ == "__main__":
@@ -68,4 +76,8 @@ if __name__ == "__main__":
     processing_thread = threading.Thread(target=process_images)
     processing_thread.start()
 
-    app.run("0.0.0.0", debug=True)
+    # Start the GCode server thread
+    gcode_thread = threading.Thread(target=gcode_server)
+    gcode_thread.start()
+
+    app.run("0.0.0.0", port=4999, debug=True)
