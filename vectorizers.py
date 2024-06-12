@@ -60,7 +60,7 @@ class PotraceVectorizer(Vectorizer):
         image_array = np.array(image) / 255.0
 
         # Quantize everything > 0.5 to 1
-        image_array[image_array > 0.5] = 1
+        image_array[image_array > 0.8] = 1
         # Quantize everything <= 0.5 to 0
         image_array[image_array < 1] = 0
 
@@ -69,12 +69,14 @@ class PotraceVectorizer(Vectorizer):
         bm = Bitmap(np.array(image_array))
 
         # Vectorize the image
-        path = bm.trace(turdsize=30, alphamax=2, opttolerance=5)
+        path = bm.trace(
+            turdsize=20, alphamax=10, opttolerance=0.8, turnpolicy=TURNPOLICY_MINORITY
+        )
 
         # Create the output file
         with open(output_path, "w") as f:
             f.write(
-                f"""<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{image.width}" height="{image.height}" viewBox="0 0 {image.width} {image.height}">"""
+                f"""<svg version="1.1" xmlns="htt p://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{image.width}" height="{image.height}" viewBox="0 0 {image.width} {image.height}">"""
             )
             parts = []
             for curve in path:
