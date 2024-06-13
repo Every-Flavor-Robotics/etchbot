@@ -60,7 +60,7 @@ void GCode::GCodeParser::parse_line(String line)
       case 2:  // Falls through to G3
       case 3:
         // process_g2_g3(line);
-        Serial.println("G2/G3 not implemented yet");
+        // Serial.println("G2/G3 not implemented yet");
         break;
       case 28:
         process_g28(line);
@@ -252,7 +252,7 @@ void GCode::parser_thread(GCode::GCodeParser& parser)
     esp_task_wdt_reset();
   }
 
-  Serial.println("G-code parsing complete");
+  //   Serial.println("G-code parsing complete");
   vTaskDelete(NULL);
 }
 

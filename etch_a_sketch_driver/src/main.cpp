@@ -120,13 +120,14 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
   switch (type)
   {
     case WStype_DISCONNECTED:
-      Serial.printf("[%u] Disconnected!\n", num);
+      //   Serial.printf("[%u] Disconnected!\n", num);
       break;
     case WStype_CONNECTED:
     {
       IPAddress ip = webSocket.remoteIP(num);
-      Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0],
-                    ip[1], ip[2], ip[3], payload);
+      //   Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num,
+      //   ip[0],
+      //                 ip[1], ip[2], ip[3], payload);
     }
     break;
     case WStype_TEXT:
@@ -144,13 +145,13 @@ void enable_motors_callback(bool value)
 {
   if (value)
   {
-    Serial.println("Enabling motors");
+    // Serial.println("Enabling motors");
     enable_flag = true;
     disable_flag = false;
   }
   else
   {
-    Serial.println("Disabling motors");
+    // Serial.println("Disabling motors");
     disable_flag = true;
     enable_flag = false;
   }
@@ -158,10 +159,10 @@ void enable_motors_callback(bool value)
 
 void home()
 {
-  Serial.println("HOMING: WAITING FOR BUTTON PRESS");
+  //   Serial.println("HOMING: WAITING FOR BUTTON PRESS");
 
   disable_flag = true;
-  delay(1000);
+  delay(10);
 
   esp_restart();
 
@@ -170,7 +171,7 @@ void home()
     delay(100);
   }
 
-  Serial.println("HOMING: BEGINNING");
+  //   Serial.println("HOMING: BEGINNING");
   delay(1000);
   left_right.zero_position();
   up_down.zero_position();
@@ -190,8 +191,8 @@ void setup()
   // Configure onboard button as input
   pinMode(0, INPUT_PULLUP);
 
-  Serial.begin(5000000);
-  delay(3000);
+  //   Serial.begin(5000000);
+  //   delay(3000);
 
   // Setup motor parameters
   config_ch0.motor_config = GARTTLeftTronix;
@@ -292,13 +293,13 @@ void setup()
   left_right.set_control_mode(MotorGo::ControlMode::Voltage);
   up_down.set_control_mode(MotorGo::ControlMode::Voltage);
 
-  pid_manager.init(WIFI_SSID, WIFI_PASSWORD);
+  pid_manager.init("EFR_test", "verysecurepassword");
 
   // Start the WebSocket server
   //   webSocket.begin();
   //   webSocket.onEvent(webSocketEvent);
 
-  stream = new GCode::WifiGCodeStream("192.168.10.15", 50);
+  stream = new GCode::WifiGCodeStream("10.42.0.213", 50);
   parser = new GCode::GCodeParser(stream, 2000);
 
   GCode::start_parser(*parser);
@@ -329,15 +330,15 @@ float target = 0.0;
 unsigned int i = 0;
 void loop_foc(void* pvParameters)
 {
-  Serial.print("Loop FOC running on core ");
-  Serial.println(xPortGetCoreID());
+  //   Serial.print("Loop FOC running on core ");
+  //   Serial.println(xPortGetCoreID());
 
   for (;;)
   {
     // Service flags
     if (enable_flag)
     {
-      Serial.println("Motors are enabled");
+      //   Serial.println("Motors are enabled");
       left_right.enable();
       up_down.enable();
       enable_flag = false;
@@ -345,7 +346,7 @@ void loop_foc(void* pvParameters)
     }
     else if (disable_flag)
     {
-      Serial.println("Motors are disabled");
+      //   Serial.println("Motors are disabled");
       left_right.disable();
       up_down.disable();
       disable_flag = false;
@@ -449,7 +450,7 @@ void loop()
       up_down.get_position() > (Y_LIM + 8) * RAD_PER_MM ||
       up_down.get_position() < -8 * RAD_PER_MM)
   {
-    Serial.println("Position out of bounds");
+    // Serial.println("Position out of bounds");
     disable_flag = true;
   }
 
@@ -523,7 +524,7 @@ void loop()
   float accel = sqrt(pow(accel_x, 2) + pow(accel_y, 2));
   if (accel > MAX_ACCELERATION)
   {
-    Serial.println("Acceleration too high: " + String(accel));
+    // Serial.println("Acceleration too high: " + String(accel));
     // Scale down the velocity
     state.a.x = (MAX_ACCELERATION / accel) * state.a.x;
     state.a.y = (MAX_ACCELERATION / accel) * state.a.y;
@@ -561,7 +562,7 @@ void loop()
       if (first)
       {
         first = false;
-        Serial.println("Waiting to preprocess all data");
+        // Serial.println("Waiting to preprocess all data");
         vTaskDelay(3000 / portTICK_PERIOD_MS);
         left_right.enable();
         up_down.enable();
