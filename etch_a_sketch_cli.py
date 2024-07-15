@@ -1,3 +1,4 @@
+from genericpath import exists
 import numpy as np
 import os
 
@@ -9,6 +10,7 @@ import shutil
 import click
 import time
 
+from video_preprocessors import FFmpegSplitter
 
 from image_preprocessors import (
     ColorbookPreprocessor,
@@ -21,6 +23,7 @@ from image_preprocessors import (
 )
 from vectorizers import PotraceVectorizer
 from gcode_generators import Svg2GcodeGenerator
+import shutil
 from gcode_filters import (
     ResolutionReducer,
     ColinearFilter,
@@ -30,6 +33,26 @@ from gcode_filters import (
 )
 
 counter = 0
+
+
+def copy_files(source, destination):
+    if source.is_file():
+        shutil.copy(source, destination)
+    elif source.is_dir():
+        shutil.copytree(source, destination, dirs_exist_ok=True)
+
+
+def file_type_correct(path: pathlib.Path, file_type: list[str]):
+    # If directory, check if any file in the directory is of the correct type
+    if path.is_dir():
+        for file in path.iterdir():
+            if file.suffix in file_type:
+                return True
+        return False
+    # If file, check if the file is of the correct type
+    elif path.is_file():
+        return path.suffix in file_type
+    return False
 
 
 def run_pipeline(
@@ -55,6 +78,8 @@ def run_pipeline(
         #     ),
         #     BlackAndWhitePreprocessor(),
         # ]
+
+    video_splitters = [FFmpegSplitter(4)]
 
     preprocessors = [
         RemBGPreprocessor(),
@@ -83,7 +108,9 @@ def run_pipeline(
     if copy:
         input_file = input_file.resolve()
         new_input_file = output_dir / input_file.name
-        shutil.copy(input_file, new_input_file)
+
+        copy_files(input_file, new_input_file)
+
         input_file = new_input_file
     else:
         input_file = input_file.resolve()
@@ -91,8 +118,30 @@ def run_pipeline(
         input_file.rename(new_input_file)
         input_file = new_input_file
 
+    if not file_type_correct(input_file, [".mp4", ".mov", ".avi", ".mkv"]):
+        click.secho(f"Skipping video splitting...", fg="red")
+
+    else:
+        click.secho(f"Splitting video...", fg="green")
+
+        for video_splitter in video_splitters:
+            input_file = video_splitter.process(input_file, output_dir, "split")
+
+            copy_files(
+                input_file,
+                output_dir
+                / f"step_{counter}_preprocessed_{type(video_splitter).__name__}",
+            )
+
+            counter += 1
+
+        click.secho(f"Splitting video complete!", fg="green")
+
     # Only run preprocessor if input file is an image
-    if not input_file.suffix in [".jpg", ".jpeg", ".png"] or skip_preprocessing:
+    if (
+        not file_type_correct(input_file, [".jpg", ".jpeg", ".png"])
+        or skip_preprocessing
+    ):
         # Print in red, skipping pre-processing
         click.secho(f"Skipping pre-processing...", fg="red")
     else:
@@ -100,11 +149,10 @@ def run_pipeline(
 
         # Process the input file
         for preprocessor in preprocessors:
-            preprocessor.process(input_file, output_dir / "preprocessed.png")
-            input_file = output_dir / "preprocessed.png"
+            input_file = preprocessor.process(input_file, output_dir, "preprocessed")
 
             # Create a copy of the preprocessed image
-            shutil.copy(
+            copy_files(
                 input_file,
                 output_dir
                 / f"step_{counter}_preprocessed_{type(preprocessor).__name__}.png",
@@ -114,7 +162,7 @@ def run_pipeline(
 
         # Print in green, processing complete
         click.secho(f"Pre-Processing complete!", fg="green")
-    if not input_file.suffix in [".jpg", ".jpeg", ".png"]:
+    if not file_type_correct(input_file, [".jpg", ".jpeg", ".png"]):
         # Print in red, skipping pre-processing
         click.secho(f"Skipping Vectorizing...", fg="red")
     else:
@@ -122,11 +170,9 @@ def run_pipeline(
 
         for vectorizer in vectorizers:
             # Process the preprocessed image
-            vectorizer.process(input_file, output_dir / "vectorized.svg")
-            input_file = output_dir / "vectorized.svg"
+            input_file = vectorizer.process(input_file, output_dir, "vectorized")
 
-            # Create a copy of the preprocessed image
-            shutil.copy(
+            copy_files(
                 input_file,
                 output_dir
                 / f"step_{counter}_preprocessed_{type(vectorizer).__name__}.svg",
@@ -136,51 +182,49 @@ def run_pipeline(
         # Print in green, processing complete
         click.secho(f"Vectorizing complete!", fg="green")
 
-    if not input_file.suffix in [".svg"]:
+    if not file_type_correct(input_file, [".svg"]):
         # Print in red, skipping pre-processing
         click.secho(f"Skipping g-code conversion...", fg="red")
     else:
         # Convert to G-code
         click.secho(f"Converting to G-code...", fg="green")
         for gcode_converter in gcode_converters:
-            gcode_converter.process(input_file, output_dir / "output.gcode")
+            input_file = gcode_converter.process(input_file, output_dir, "output")
 
-            input_file = output_dir / "output.gcode"
-
-            # Create a copy of the preprocessed image
-            shutil.copy(
+            copy_files(
                 input_file,
                 output_dir
                 / f"step_{counter}_preprocessed_{type(gcode_converter).__name__}.gcode",
             )
+
             counter += 1
 
         # Print in green, processing complete
         click.secho(f"Converting to G-code complete!", fg="green")
 
-    if not input_file.suffix in [".gcode"]:
+    if not file_type_correct(input_file, [".gcode"]):
         # Print in red, skipping pre-processing
         click.secho(f"Skipping G-code filtering...", fg="red")
     else:
         # Filter the G-code
         click.secho(f"Filtering G-code...", fg="green")
         for gcode_filter in gcode_filters:
-            gcode_filter.process(input_file, output_dir / "output.gcode")
+            input_file = gcode_filter.process(input_file, output_dir, "output")
 
-            input_file = output_dir / "output.gcode"
-
-            shutil.copy(
+            copy_files(
                 input_file,
                 output_dir
                 / f"step_{counter}_preprocessed_{type(gcode_filter).__name__}.gcode",
             )
+
             counter += 1
 
     # Finally, move the final gcode to final.gcode
-    shutil.copy(
+    copy_files(
         input_file,
-        output_dir / "final.gcode",
+        output_dir / f"final.gcode",
     )
+    counter = 0
     return input_file
 
 

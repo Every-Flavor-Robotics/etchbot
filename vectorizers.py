@@ -1,14 +1,16 @@
-import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
 from click import secho
-
 import numpy as np
 from PIL import Image
+
+# Base class for all preprocessors
+from preprocessor_utils import Preprocessor
+
 from potrace import TURNPOLICY_MINORITY, Bitmap  # `potracer` library
 
 
-class Vectorizer(ABC):
+class Vectorizer(Preprocessor):
     """Abstract class for vectorizers.
 
     All vectorizers take a Path to an image as an input and return a Path to a vectorized image as an output. The process
@@ -16,28 +18,16 @@ class Vectorizer(ABC):
     step in the pipeline.
     """
 
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    def process(self, image_path: Path, output_path: Path) -> Path:
-        """Process the input image and return the output image.
-
-        Args:
-            image_path (Path): Path to the image to be processed
-            output_path (Path): Path to save the processed image
-
-        Returns:
-            Path: Path to the processed image, ready for the next step in the pipeline
-        """
-
-        secho(f"\tRunning {self.__class__.__name__}...", fg="green")
+    SUPPORTED_TYPES = [".png", ".jpg", ".jpeg"]
+    OUTPUT_EXTENSION = ".svg"
 
 
 class PotraceVectorizer(Vectorizer):
     """PotraceVectorizer uses potrace to vectorize the input image."""
 
-    def process(self, image_path: Path, output_path: Path) -> None:
+    PARALLELIZABLE = True
+
+    def _process(self, image_path: Path, output_path: Path) -> None:
         """Process the input image and return the output image.
 
         Args:
@@ -48,7 +38,7 @@ class PotraceVectorizer(Vectorizer):
             Path: Path to the processed image, ready for the next step in the pipeline
         """
 
-        super().process(image_path, output_path)
+        super()._process(image_path, output_path)
 
         # Confirm that the input image exists
         if not image_path.exists():

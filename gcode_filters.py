@@ -3,8 +3,11 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 import click
 
+# Base class for all preprocessors
+from preprocessor_utils import Preprocessor
 
-class GCodeFilter(ABC):
+
+class GCodeFilter(Preprocessor):
     """Abstract class for GCode Filters.
 
     All GCode Filters take a Path to a GCode file as an input and return a Path to a GCode file as an output. The process
@@ -12,23 +15,8 @@ class GCodeFilter(ABC):
     next step in the pipeline.
     """
 
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    def process(self, gcode_path: Path, output_path: Path) -> Path:
-        """Process the input image and return the output image.
-
-        Args:
-            gcode_path (Path): Path to the GCode file to be processed
-            output_path (Path): Path to save the processed gcode
-
-        Returns:
-            Path: Path to the gcode image, ready for the next step in the pipeline
-        """
-
-        # Print class name and "Running..." in green
-        click.secho(f"\tRunning {self.__class__.__name__}...", fg="green")
+    SUPPORTED_TYPES = [".gcode"]
+    OUTPUT_EXTENSION = ".gcode"
 
     def decode_line(self, line: str) -> tuple[str, dict]:
         """Decode a line from the GCode file.
@@ -62,11 +50,9 @@ class GCodeFilter(ABC):
 class GCodeCleaner(GCodeFilter):
     """GCodeCleaner removes comments and empty lines from the GCode file."""
 
-    def __init__(self):
-        """Initialize the GCodeCleaner."""
-        super().__init__()
+    PARALLELIZABLE = True
 
-    def process(self, gcode_path: Path, output_path: Path) -> None:
+    def _process(self, gcode_path: Path, output_path: Path) -> None:
         """Process the input gcode file and return the output gcode file with comments and empty lines removed.
 
         Args:
@@ -76,7 +62,7 @@ class GCodeCleaner(GCodeFilter):
         Returns:
             Path: Path to the processed GCode file, ready for the next step in the pipeline
         """
-        super().process(gcode_path, output_path)
+        super()._process(gcode_path, output_path)
 
         with open(gcode_path, "r") as f:
             lines = f.readlines()
@@ -102,11 +88,9 @@ class RemoveZ(GCodeFilter):
 
     """
 
-    def __init__(self):
-        """Initialize the RemoveZ."""
-        super().__init__()
+    PARALLELIZABLE = True
 
-    def process(self, gcode_path: Path, output_path: Path) -> None:
+    def _process(self, gcode_path: Path, output_path: Path) -> None:
         """Process the input gcode file and return the output gcode file with the Z axis removed.
 
         Args:
@@ -116,7 +100,7 @@ class RemoveZ(GCodeFilter):
         Returns:
             Path: Path to the processed GCode file, ready for the next step in the pipeline
         """
-        super().process(gcode_path, output_path)
+        super()._process(gcode_path, output_path)
 
         with open(gcode_path, "r") as f:
             lines = f.readlines()
@@ -151,11 +135,9 @@ class LoopCloser(GCodeFilter):
 
     """
 
-    def __init__(self):
-        """Initialize the LoopCloser."""
-        super().__init__()
+    PARALLELIZABLE = True
 
-    def process(self, gcode_path: Path, output_path: Path) -> None:
+    def _process(self, gcode_path: Path, output_path: Path) -> None:
         """Process the input gcode file and return the output gcode file with closed loops.
 
         Args:
@@ -165,7 +147,7 @@ class LoopCloser(GCodeFilter):
         Returns:
             Path: Path to the processed GCode file, ready for the next step in the pipeline
         """
-        super().process(gcode_path, output_path)
+        super()._process(gcode_path, output_path)
 
         with open(gcode_path, "r") as f:
             lines = f.readlines()
@@ -200,6 +182,8 @@ class ResolutionReducer(GCodeFilter):
 
     """
 
+    PARALLELIZABLE = True
+
     def __init__(self, tolerance: float = 0.1):
         """Initialize the ResolutionReducer with the tolerance.
 
@@ -210,7 +194,7 @@ class ResolutionReducer(GCodeFilter):
 
         self.tolerance = tolerance
 
-    def process(self, gcode_path: Path, output_path: Path) -> None:
+    def _process(self, gcode_path: Path, output_path: Path) -> None:
         """Process the input gcode file and return the output gcode file with reduced resolution.
 
         Args:
@@ -220,7 +204,7 @@ class ResolutionReducer(GCodeFilter):
         Returns:
             Path: Path to the processed GCode file, ready for the next step in the pipeline
         """
-        super().process(gcode_path, output_path)
+        super()._process(gcode_path, output_path)
 
         with open(gcode_path, "r") as f:
             lines = f.readlines()
@@ -284,13 +268,15 @@ class ColinearFilter(GCodeFilter):
 
     """
 
+    PARALLELIZABLE = True
+
     def __init__(self, dot_product_threshold: float = 0.996):
         """Initialize the ColinearFilter."""
         super().__init__()
 
         self.dot_product_threshold = dot_product_threshold
 
-    def process(self, gcode_path: Path, output_path: Path) -> None:
+    def _process(self, gcode_path: Path, output_path: Path) -> None:
         """Process the input gcode file and return the output gcode file with colinear points removed.
 
         Args:
@@ -300,7 +286,7 @@ class ColinearFilter(GCodeFilter):
         Returns:
             Path: Path to the processed GCode file, ready for the next step in the pipeline
         """
-        super().process(gcode_path, output_path)
+        super()._process(gcode_path, output_path)
 
         with open(gcode_path, "r") as f:
             lines = f.readlines()
@@ -390,12 +376,13 @@ class TSPOptimizer(GCodeFilter):
     """
 
     OPTIMIZER_PATH = "~/efr/gcode-optimizer/rust_optimizer.py"
+    PARALLELIZABLE = True
 
     def __init__(self):
         """Initialize the TSPOptimizer."""
         super().__init__()
 
-    def process(self, gcode_path: Path, output_path: Path) -> None:
+    def _process(self, gcode_path: Path, output_path: Path) -> None:
         """Process the input gcode file and return the output gcode file with the points optimized.
 
         Args:
@@ -405,7 +392,7 @@ class TSPOptimizer(GCodeFilter):
         Returns:
             Path: Path to the processed GCode file, ready for the next step in the pipeline
         """
-        super().process(gcode_path, output_path)
+        super()._process(gcode_path, output_path)
 
         # Construct the command to run the optimizer
         command = f"python {self.OPTIMIZER_PATH} --input_file {gcode_path} --output_file {output_path}"

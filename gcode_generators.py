@@ -1,10 +1,11 @@
 import subprocess
-from abc import ABC, abstractmethod
 from pathlib import Path
-import click
+
+# Base class for all preprocessors
+from preprocessor_utils import Preprocessor
 
 
-class GCodeGenerator(ABC):
+class GCodeGenerator(Preprocessor   ):
     """Abstract class for GCode Generators.
 
     All GCode Generators take a Path to an image as an input and return a Path to a GCode file as an output. The process
@@ -12,23 +13,8 @@ class GCodeGenerator(ABC):
     next step in the pipeline.
     """
 
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    def process(self, image_path: Path, output_path: Path) -> Path:
-        """Process the input image and return the output image.
-
-        Args:
-            image_path (Path): Path to the raw image to be processed
-            output_path (Path): Path to save the processed image
-
-        Returns:
-            Path: Path to the processed image, ready for the next step in the pipeline
-        """
-
-        # Print class name and "Running..." in green
-        click.secho(f"\tRunning {self.__class__.__name__}...", fg="green")
+    SUPPORTED_TYPES = [".svg"]
+    OUTPUT_EXTENSION = ".gcode"
 
 
 class Svg2GcodeGenerator(GCodeGenerator):
@@ -38,6 +24,8 @@ class Svg2GcodeGenerator(GCodeGenerator):
     """
 
     SVG2GCODE_PATH = "~/efr/svg2gcode/Cargo.toml"
+    PARALLELIZABLE = True
+
 
     def __init__(
         self,
@@ -61,7 +49,7 @@ class Svg2GcodeGenerator(GCodeGenerator):
         self.output_height = output_height
         self.circular_interpolation = circular_interpolation
 
-    def process(self, image_path: Path, output_path: Path) -> None:
+    def _process(self, image_path: Path, output_path: Path) -> None:
         """Process the input svg image and return the output GCode
 
         Args:
@@ -69,7 +57,7 @@ class Svg2GcodeGenerator(GCodeGenerator):
 
         Returns: None
         """
-        super().process(image_path, output_path)
+        super()._process(image_path, output_path)
 
         # Confirm that the input image exists
         if not image_path.exists():
