@@ -7,6 +7,10 @@ import threading
 import time
 import shutil
 import subprocess
+from gcode_server import (
+    gcode_blueprint,
+    run_gcode_server,
+)
 
 
 UPLOAD_DIR = Path("uploads")
@@ -14,6 +18,7 @@ PROCESSING_DIR = Path("processing")
 OUTPUT_DIR = Path("gcode_outputs")
 
 app = Flask(__name__)
+app.register_blueprint(gcode_blueprint)
 
 
 @app.route("/upload", methods=["POST"])
@@ -77,7 +82,10 @@ if __name__ == "__main__":
     processing_thread.start()
 
     # Start the GCode server thread
-    gcode_thread = threading.Thread(target=gcode_server)
-    gcode_thread.start()
+    # gcode_thread = threading.Thread(target=gcode_server)
+    # gcode_thread.start()
 
-    app.run("0.0.0.0", port=4999, debug=True)
+    run_gcode_server(OUTPUT_DIR, run_flask=False)
+
+    app.run("0.0.0.0", port=5001, use_reloader=False, debug=False)
+

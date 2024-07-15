@@ -4,8 +4,11 @@ import time
 import click
 import threading
 import socket
-from flask import Flask, jsonify
+from flask import Flask, Blueprint, jsonify
+import re
 from filelock import FileLock, Timeout
+from click import secho
+
 
 gcode_buffer = []
 buffer_lock = threading.Lock()
@@ -30,15 +33,15 @@ def write_robot_status(status):
                     f.write(status)
         except Timeout:
             print("Failed to acquire lock on robot_status.txt")
-
         break
 
 
 class GCode:
-    def __init__(self, gcode_file, lines=None):
+    def __init__(self, gcode_file, lines=None, parent_dir=None):
         self.gcode_file = gcode_file
+        self.parent_dir = parent_dir
 
-        if lines != None:
+        if lines is not None:
             self.gcode_lines = lines
         else:
             self.gcode_lines = []
@@ -62,6 +65,8 @@ class GCode:
     def delete_file(self):
         if self.gcode_file is not None:
             self.gcode_file.unlink()
+        if self.parent_dir and not any(self.parent_dir.iterdir()):
+            self.parent_dir.rmdir()
 
     def reset(self):
         self.line_number = 0
@@ -69,7 +74,6 @@ class GCode:
 
 class EmptyGCode(GCode):
     def __init__(self):
-        # Call init with END line only
         super().__init__(None, ["END\n"])
 
 
@@ -102,84 +106,91 @@ class GCodeRequestHandler(socketserver.StreamRequestHandler):
                     except (ValueError, IndexError):
                         self.request.sendall(b"Invalid request format.\n")
                         continue
-                    # Send the G-code lines
                     gcode_block = gcode.get_gcode(num_lines_requested)
 
                     print("Sending response")
                     self.request.sendall(gcode_block.encode())
 
                     print("Response sent")
-            # Delete gcode file
             gcode.delete_file()
         except socket.timeout:
             print("Connection timed out. Will retry this gcode next time")
-            # Put gcode back in the buffer
             gcode.reset()
             with buffer_lock:
                 gcode_buffer.insert(0, gcode)
-
             write_robot_status(status_ERROR)
-
         except (ConnectionResetError, BrokenPipeError):
             print("Connection closed by client. Will retry this gcode next time")
-
-            # Put gcode back in the buffer
             gcode.reset()
             with buffer_lock:
                 gcode_buffer.insert(0, gcode)
-
-        # Close the socket and connection
         print("G-code transmission ended. Closing connection.")
         self.request.close()
 
 
 def get_new_gcode(scan_directory: pathlib.Path):
-    """Thread for reading new GCode files"""
     global gcode_buffer, buffer_lock
 
     print("Scanning directory:", scan_directory)
 
     processed_files = set()
     while True:
-        # Check for new GCode files
         new_gcode_files = list(scan_directory.glob("*.gcode"))
-
-        # Remove already processed files from the list
         new_gcode_files = [
             gcode_file
             for gcode_file in new_gcode_files
             if gcode_file not in processed_files
         ]
 
-        # Process new GCode files
         for gcode_file in new_gcode_files:
             print("Reading new GCode file:", gcode_file)
             with buffer_lock:
                 gcode_buffer.append(GCode(gcode_file))
             processed_files.add(gcode_file)
 
-        # Sleep for a while
         time.sleep(2)
 
 
-### Code for rest endpoint to allow etch a sketch to check if gcode is available
-app = Flask(__name__)
+def extract_number(filename: str):
+    match = re.search(r"\d+", filename)
+    return int(match.group()) if match else float("inf")
 
 
-@app.route("/gcode/available")
+gcode_blueprint = Blueprint("gcode_blueprint", __name__)
+
+
+@gcode_blueprint.route("/gcode/available")
 def gcode_available():
     global gcode_buffer, buffer_lock
     with buffer_lock:
-        # Return 200 if there is GCode in the buffer, else 204
         if len(gcode_buffer) > 0:
             return "", 200
         else:
-            print("Returng 204")
+            print("Returning 204")
             write_robot_status(status_READY)
             return "", 204
 
 
-# Add click argument for gcode directory
+def start_gcode_server(host="0.0.0.0", port=5000):
+    # Print in green, starting the GCode server
+    secho("GCode Streamer: Starting up", fg="green")
+    print("\tGCode Streamer: Host:", host)
+    print("\tGCode Streamer: Port:", port)
+    with socketserver.TCPServer((host, port), GCodeRequestHandler) as server:
+        secho("GCode Streamer: Server listening...", fg="green")
+        server.serve_forever()
+
+
+def run_gcode_server(scan_directory, run_flask=True):
+    threading.Thread(target=get_new_gcode, args=(scan_directory,)).start()
+    threading.Thread(target=start_gcode_server).start()
+
+    if run_flask:
+        app = Flask(__name__)
+        app.register_blueprint(gcode_blueprint)
+        app.run("0.0.0.0", port=5001, use_reloader=False, debug=False)
+
+
 @click.command()
 @click.option(
     "--gcode_dir",
@@ -188,22 +199,10 @@ def gcode_available():
     type=click.Path(exists=True),
 )
 def main(gcode_dir: pathlib.Path):
-
     gcode_dir = pathlib.Path(gcode_dir)
-    # Start the GCode reading thread
-    gcode_thread = threading.Thread(target=get_new_gcode, args=(gcode_dir,))
-    gcode_thread.start()
-
-    # Start the Flask app to host the rest endpoint
-    flask_thread = threading.Thread(
-        target=app.run, kwargs={"host": "0.0.0.0", "port": 5001}
-    )
-    flask_thread.start()
-
-    host, port = "0.0.0.0", 5000  # Your host and port here
-    with socketserver.TCPServer((host, port), GCodeRequestHandler) as server:
-        print("Server listening...")
-        server.serve_forever()
+    if not gcode_dir.exists():
+        raise FileNotFoundError(f"GCode directory {gcode_dir} not found.")
+    run_gcode_server(gcode_dir)
 
 
 if __name__ == "__main__":
