@@ -5,7 +5,7 @@ from pathlib import Path
 from preprocessor_utils import Preprocessor
 
 
-class GCodeGenerator(Preprocessor   ):
+class GCodeGenerator(Preprocessor):
     """Abstract class for GCode Generators.
 
     All GCode Generators take a Path to an image as an input and return a Path to a GCode file as an output. The process
@@ -25,7 +25,6 @@ class Svg2GcodeGenerator(GCodeGenerator):
 
     SVG2GCODE_PATH = "~/efr/svg2gcode/Cargo.toml"
     PARALLELIZABLE = True
-
 
     def __init__(
         self,
@@ -66,7 +65,7 @@ class Svg2GcodeGenerator(GCodeGenerator):
         # Construct the command to convert the SVG to GCode
         command = f"cargo run --manifest-path {self.SVG2GCODE_PATH} --release -- "
         # Add arguments
-        command += f"{image_path} --circular-interpolation {"true" if self.circular_interpolation else "false"} -o {output_path} --dimensions {self.output_width}mm,{self.output_height}mm --feedrate {self.feed_rate} --origin 0,0"
+        command += f"{image_path} --circular-interpolation {'true' if self.circular_interpolation else 'false'} -o {output_path} --dimensions {self.output_width}mm,{self.output_height}mm --feedrate {self.feed_rate} --origin 0,0"
 
         # Run the command
         subprocess.run(command, shell=True)
