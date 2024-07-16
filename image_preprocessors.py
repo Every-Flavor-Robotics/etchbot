@@ -134,7 +134,7 @@ class AspectRatioPreprocessor(ImagePreprocessor):
 class ColorbookPreprocessor(ImagePreprocessor):
     """Colorbook Preprocessor generates contours from the input image, like a coloring book."""
 
-    COLORBOOK_PATH = "~/efr/GsColorbook/python-implementation/colorbook_cli.py"
+    COLORBOOK_PATH = "./modules/GsColorbook/python-implementation/colorbook_cli.py"
     PARALLELIZABLE = False
 
     def _process(self, input_path: Path, output_path: Path) -> Path:
@@ -196,7 +196,7 @@ class CoherentLineDrawingPreprocessor(ImagePreprocessor):
     Code at: https://github.com/SSARCandy/Coherent-Line-Drawing
     """
 
-    COHERENT_LINE_DRAWING_PATH = "~/efr/Coherent-Line-Drawing/build/cld"
+    COHERENT_LINE_DRAWING_PATH = "./modules/Coherent-Line-Drawing/build/cld"
     PARALLELIZABLE = False
 
     def __init__(
@@ -460,7 +460,7 @@ class CartoonifyPreProcessor(ImagePreprocessor):
 
     """
 
-    PATH_TO_CARTOONIFY = "~/efr/cartoonify/cartoongan/etch_a_sketch_demo.py"
+    PATH_TO_CARTOONIFY = "./modules/cartoonify/cartoongan/etch_a_sketch_demo.py"
     PARALLELIZABLE = False
 
     def _process(self, input_path: Path, output_path: Path) -> Path:
@@ -502,7 +502,7 @@ class CartoonifyPreProcessor(ImagePreprocessor):
 class InformativeDrawingsPreprocessor(ImagePreprocessor):
     """Informative Drawings Preprocessor generates informative drawings from the input image."""
 
-    PATH_TO_INFORMATIVE_DRAWINGS = "~/efr/informative-drawings/run_etch.py"
+    PATH_TO_INFORMATIVE_DRAWINGS = "./modules/informative-drawings/run_etch.py"
     PARALLELIZABLE = True
 
     def _process(self, input_path: Path, output_path: Path) -> Path:

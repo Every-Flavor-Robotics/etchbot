@@ -385,7 +385,7 @@ class TSPOptimizer(GCodeFilter):
     solver must be installed on the system and available in the PATH.
     """
 
-    OPTIMIZER_PATH = "~/efr/gcode-optimizer/rust_optimizer.py"
+    OPTIMIZER_PATH = "./modules/gcode-optimizer/rust_optimizer.py"
     PARALLELIZABLE = True
 
     def __init__(self):
