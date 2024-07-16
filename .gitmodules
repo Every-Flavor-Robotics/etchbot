@@ -1,0 +1,9 @@
+[submodule "modules/svg2gcode"]
+	path = modules/svg2gcode
+	url = https://github.com/Every-Flavor-Robotics/svg2gcode.git
+[submodule "modules/gcode-optimizer"]
+	path = modules/gcode-optimizer
+	url = https://github.com/Every-Flavor-Robotics/gcode-optimizer.git
+[submodule "modules/informative-drawings"]
+	path = modules/informative-drawings
+	url = https://github.com/Every-Flavor-Robotics/informative-drawings.git
