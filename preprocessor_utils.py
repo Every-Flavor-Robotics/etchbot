@@ -82,7 +82,6 @@ class Preprocessor(ABC):
         Returns:
             Path: Path to the processed file, ready for the next step in the pipeline
         """
-        pass
 
     def _process_batch(
         self, input_dir: Path, output_dir: Path, output_name: str

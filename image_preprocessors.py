@@ -2,6 +2,7 @@ import subprocess
 from pathlib import Path
 from click import secho
 from PIL import Image
+from matplotlib.streamplot import OutOfBounds
 import numpy as np
 import cv2
 
@@ -42,7 +43,7 @@ class AspectRatioPreprocessor(ImagePreprocessor):
         self.aspect_ratio = aspect_ratio
         self.should_resize = resize
 
-    def _process(self, image_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input image and return the output image.
 
         Args:
@@ -52,14 +53,14 @@ class AspectRatioPreprocessor(ImagePreprocessor):
         Returns:
             Path: Path to the processed image, ready for the next step in the pipeline
         """
-        super()._process(image_path, output_path)
+        super()._process(input_path, output_path)
 
         # Confirm that the input image exists
         if not image_path.exists():
-            raise FileNotFoundError(f"Image {image_path} not found.")
+            raise FileNotFoundError(f"Image {input_path} not found.")
 
         # Load the image
-        image = Image.open(image_path)
+        image = Image.open(input_path)
 
         if self.should_resize:
             # Resize the image to the correct aspect ratio
@@ -73,7 +74,8 @@ class AspectRatioPreprocessor(ImagePreprocessor):
                 with FileLock(output_path.with_suffix(".lock"), timeout=1):
                     # Save the cropped image
                     image.save(output_path)
-                    break
+
+                break
             except:
                 pass
 
@@ -82,6 +84,8 @@ class AspectRatioPreprocessor(ImagePreprocessor):
             raise FileNotFoundError(
                 f"Output image {output_path} not generated correctly."
             )
+
+        return output_path
 
     def compute_new_dimensions(self, width: int, height: int) -> tuple[int, int]:
         """Compute the new dimensions of the image after cropping."""
@@ -133,7 +137,7 @@ class ColorbookPreprocessor(ImagePreprocessor):
     COLORBOOK_PATH = "~/efr/GsColorbook/python-implementation/colorbook_cli.py"
     PARALLELIZABLE = False
 
-    def _process(self, image_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input image and return the output image.
 
         Args:
@@ -142,11 +146,11 @@ class ColorbookPreprocessor(ImagePreprocessor):
         Returns:
             Path: Path to the processed image, ready for the next step in the pipeline
         """
-        super()._process(image_path, output_path)
+        super()._process(input_path, output_path)
 
         # Confirm that the input image exists
-        if not image_path.exists():
-            raise FileNotFoundError(f"Image {image_path} not found.")
+        if not input_path.exists():
+            raise FileNotFoundError(f"Image {input_path} not found.")
 
         # Temp directory to store the output of the colorbook preprocessor
         # Remove the image name and extension from the output path
@@ -154,7 +158,7 @@ class ColorbookPreprocessor(ImagePreprocessor):
         output_temp_dir = output_path.parent / "temp"
 
         # Construct the command to run the colorbook preprocessor
-        command = f"python {self.COLORBOOK_PATH} -i {image_path.absolute()} -o {output_temp_dir}"
+        command = f"python {self.COLORBOOK_PATH} -i {input_path.absolute()} -o {output_temp_dir}"
 
         # Run the command
         try:
@@ -182,6 +186,8 @@ class ColorbookPreprocessor(ImagePreprocessor):
 
         # Remove the temp directory
         subprocess.run(f"rm -r {output_temp_dir}", check=True, shell=True)
+
+        return output_path
 
 
 class CoherentLineDrawingPreprocessor(ImagePreprocessor):
@@ -237,7 +243,7 @@ class CoherentLineDrawingPreprocessor(ImagePreprocessor):
 
         return args_str
 
-    def _process(self, image_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input image and return the output image.
 
         Args:
@@ -247,7 +253,7 @@ class CoherentLineDrawingPreprocessor(ImagePreprocessor):
         Returns: None
         """
 
-        super()._process(image_path, output_path)
+        super()._process(input_path, output_path)
 
         # Construct args
         args = {
@@ -259,7 +265,7 @@ class CoherentLineDrawingPreprocessor(ImagePreprocessor):
             "--ETF_iter": self.etf_iterations,
             "--CLD_iter": self.cld_iterations,
             "--output": output_path,
-            "--src": image_path,
+            "--src": input_path,
         }
 
         # Construct the command to run the Coherent Line Drawing preprocessor
@@ -284,9 +290,11 @@ class CoherentLineDrawingPreprocessor(ImagePreprocessor):
                     image = Image.open(output_path).convert("L")
                     image.save(output_path)
 
-                    break
+                break
             except:
                 pass
+
+        return output_path
 
 
 class DeNoisePreprocessor(ImagePreprocessor):
@@ -304,7 +312,7 @@ class DeNoisePreprocessor(ImagePreprocessor):
 
         self.noise_factor = noise_factor
 
-    def _process(self, image_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input image and return the output image.
 
         Args:
@@ -314,14 +322,14 @@ class DeNoisePreprocessor(ImagePreprocessor):
         Returns: None
         """
 
-        super()._process(image_path, output_path)
+        super()._process(input_path, output_path)
 
         # Confirm that the input image exists
-        if not image_path.exists():
-            raise FileNotFoundError(f"Image {image_path} not found.")
+        if not input_path.exists():
+            raise FileNotFoundError(f"Image {input_path} not found.")
 
         # Load the image
-        image = Image.open(image_path)
+        image = Image.open(input_path)
 
         # Remove noise from the image
         image = self.de_noise(image)
@@ -341,6 +349,8 @@ class DeNoisePreprocessor(ImagePreprocessor):
             raise FileNotFoundError(
                 f"Output image {output_path} not generated correctly."
             )
+
+        return output_path
 
     def de_noise(self, img: Image.Image) -> Image.Image:
         """Remove noise from the image."""
@@ -363,7 +373,7 @@ class BlackAndWhitePreprocessor(ImagePreprocessor):
 
     PARALLELIZABLE = False
 
-    def _process(self, image_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input image and return the output image.
 
         Args:
@@ -373,14 +383,14 @@ class BlackAndWhitePreprocessor(ImagePreprocessor):
         Returns: None
         """
 
-        super()._process(image_path, output_path)
+        super()._process(input_path, output_path)
 
         # Confirm that the input image exists
-        if not image_path.exists():
-            raise FileNotFoundError(f"Image {image_path} not found.")
+        if not input_path.exists():
+            raise FileNotFoundError(f"Image {input_path} not found.")
 
         # Load the image
-        image = Image.open(image_path)
+        image = Image.open(input_path)
 
         # Convert the image to black and white
         image = image.convert("L")
@@ -401,6 +411,8 @@ class BlackAndWhitePreprocessor(ImagePreprocessor):
                 f"Output image {output_path} not generated correctly."
             )
 
+        return output_path
+
 
 class RemBGPreprocessor(ImagePreprocessor):
     """RemBG Preprocessor removes the background from the input image."""
@@ -408,7 +420,7 @@ class RemBGPreprocessor(ImagePreprocessor):
     PATH_TO_BACKGROUND_REMOVER = "backgroundremover"
     PARALLELIZABLE = True
 
-    def _process(self, image_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input image and return the output image.
 
         Args:
@@ -418,13 +430,13 @@ class RemBGPreprocessor(ImagePreprocessor):
         Returns: None
         """
 
-        super()._process(image_path, output_path)
+        super()._process(input_path, output_path)
 
         # Confirm that the input image exists
-        if not image_path.exists():
-            raise FileNotFoundError(f"Image {image_path} not found.")
+        if not input_path.exists():
+            raise FileNotFoundError(f"Image {input_path} not found.")
 
-        command = f"{self.PATH_TO_BACKGROUND_REMOVER} -i {image_path} -o {output_path}"
+        command = f"{self.PATH_TO_BACKGROUND_REMOVER} -i {input_path} -o {output_path}"
 
         # Run the command
         try:
@@ -438,6 +450,8 @@ class RemBGPreprocessor(ImagePreprocessor):
                 f"Output image {output_path} not generated correctly."
             )
 
+        return output_path
+
 
 class CartoonifyPreProcessor(ImagePreprocessor):
     """Cartoonify Preprocessor converts the input image to a cartoon-like image.
@@ -449,7 +463,7 @@ class CartoonifyPreProcessor(ImagePreprocessor):
     PATH_TO_CARTOONIFY = "~/efr/cartoonify/cartoongan/etch_a_sketch_demo.py"
     PARALLELIZABLE = False
 
-    def _process(self, image_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input image and return the output image.
 
         Args:
@@ -459,13 +473,13 @@ class CartoonifyPreProcessor(ImagePreprocessor):
         Returns: None
         """
 
-        super()._process(image_path, output_path)
+        super()._process(input_path, output_path)
 
         # Confirm that the input image exists
-        if not image_path.exists():
-            raise FileNotFoundError(f"Image {image_path} not found.")
+        if not input_path.exists():
+            raise FileNotFoundError(f"Image {input_path} not found.")
 
-        args = f"--input_path {image_path} --output_path {output_path}"
+        args = f"--input_path {input_path} --output_path {output_path}"
 
         # Construct the command to run the Cartoonify preprocessor
         command = f"python {self.PATH_TO_CARTOONIFY} {args}"
@@ -482,6 +496,8 @@ class CartoonifyPreProcessor(ImagePreprocessor):
                 f"Output image {output_path} not generated correctly."
             )
 
+        return output_path
+
 
 class InformativeDrawingsPreprocessor(ImagePreprocessor):
     """Informative Drawings Preprocessor generates informative drawings from the input image."""
@@ -489,27 +505,24 @@ class InformativeDrawingsPreprocessor(ImagePreprocessor):
     PATH_TO_INFORMATIVE_DRAWINGS = "~/efr/informative-drawings/run_etch.py"
     PARALLELIZABLE = True
 
-    def _process(self, image_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input image and return the output image.
 
         Args:
-            image_path (Path): Path to the raw image to be processed
+            input_path (Path): Path to the raw image to be processed
             output_path (Path): Path to save the processed image
 
         Returns: None
         """
 
-        super()._process(image_path, output_path)
+        super()._process(input_path, output_path)
 
         # Confirm that the input image exists
-        if not image_path.exists():
-            raise FileNotFoundError(f"Image {image_path} not found.")
-
-        # Load the image
-        image = Image.open(image_path)
+        if not input_path.exists():
+            raise FileNotFoundError(f"Image {input_path} not found.")
 
         args = (
-            f"--input_file {image_path} --output_file {output_path} --name anime_style"
+            f"--input_file {input_path} --output_file {output_path} --name anime_style"
         )
 
         # Construct the command to run the Informative Drawings preprocessor
@@ -533,3 +546,5 @@ class InformativeDrawingsPreprocessor(ImagePreprocessor):
                     break
             except:
                 pass
+
+        return output_path

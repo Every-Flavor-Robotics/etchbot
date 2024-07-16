@@ -27,7 +27,7 @@ class PotraceVectorizer(Vectorizer):
 
     PARALLELIZABLE = True
 
-    def _process(self, image_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input image and return the output image.
 
         Args:
@@ -38,14 +38,14 @@ class PotraceVectorizer(Vectorizer):
             Path: Path to the processed image, ready for the next step in the pipeline
         """
 
-        super()._process(image_path, output_path)
+        super()._process(input_path, output_path)
 
         # Confirm that the input image exists
-        if not image_path.exists():
-            raise FileNotFoundError(f"Image {image_path} not found.")
+        if not input_path.exists():
+            raise FileNotFoundError(f"Image {input_path} not found.")
 
         # Open image with PIL
-        image = Image.open(image_path)
+        image = Image.open(input_path)
 
         image_array = np.array(image) / 255.0
 
@@ -88,3 +88,5 @@ class PotraceVectorizer(Vectorizer):
                 f'<path stroke="#000000" fill="None" fill-rule="evenodd" d="{"".join(parts)}"/>'
             )
             f.write("</svg>")
+
+        return output_path

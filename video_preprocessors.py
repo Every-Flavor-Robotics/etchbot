@@ -50,7 +50,7 @@ class FFmpegSplitter(VideoSplitters):
 
         super().__init__()
 
-    def _split_video(self, input_path: Path, output_dir: Path) -> None:
+    def _split_video(self, input_path: Path, output_dir: Path) -> Path:
         """Split the video into individual frames using FFmpeg.
 
         Args:
@@ -82,6 +82,8 @@ class FFmpegSplitter(VideoSplitters):
         # Confirm that the FFmpeg command ran successfully
         if process.returncode != 0:
             raise ValueError(f"FFmpeg command failed: {stderr.decode('utf-8')}")
+
+        return output_dir
 
     def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input video and return the output frames.

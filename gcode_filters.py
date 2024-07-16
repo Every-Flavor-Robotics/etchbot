@@ -52,19 +52,19 @@ class GCodeCleaner(GCodeFilter):
 
     PARALLELIZABLE = True
 
-    def _process(self, gcode_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input gcode file and return the output gcode file with comments and empty lines removed.
 
         Args:
-            gcode_path (Path): Path to the GCode file to be processed
+            input_path (Path): Path to the GCode file to be processed
             output_path (Path): Path to save the processed GCode file
 
         Returns:
             Path: Path to the processed GCode file, ready for the next step in the pipeline
         """
-        super()._process(gcode_path, output_path)
+        super()._process(input_path, output_path)
 
-        with open(gcode_path, "r") as f:
+        with open(input_path, "r") as f:
             lines = f.readlines()
 
         new_lines = []
@@ -79,6 +79,8 @@ class GCodeCleaner(GCodeFilter):
         with open(output_path, "w") as f:
             f.writelines(new_lines)
 
+        return output_path
+
 
 class RemoveZ(GCodeFilter):
     """RemoveZ removes the Z axis from the GCode file.
@@ -90,19 +92,19 @@ class RemoveZ(GCodeFilter):
 
     PARALLELIZABLE = True
 
-    def _process(self, gcode_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input gcode file and return the output gcode file with the Z axis removed.
 
         Args:
-            gcode_path (Path): Path to the GCode file to be processed
+            input_path (Path): Path to the GCode file to be processed
             output_path (Path): Path to save the processed GCode file
 
         Returns:
             Path: Path to the processed GCode file, ready for the next step in the pipeline
         """
-        super()._process(gcode_path, output_path)
+        super()._process(input_path, output_path)
 
-        with open(gcode_path, "r") as f:
+        with open(input_path, "r") as f:
             lines = f.readlines()
 
         new_lines = []
@@ -126,6 +128,8 @@ class RemoveZ(GCodeFilter):
         with open(output_path, "w") as f:
             f.writelines(new_lines)
 
+        return output_path
+
 
 class LoopCloser(GCodeFilter):
     """LoopCloser closes loops in the GCode file.
@@ -137,19 +141,19 @@ class LoopCloser(GCodeFilter):
 
     PARALLELIZABLE = True
 
-    def _process(self, gcode_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input gcode file and return the output gcode file with closed loops.
 
         Args:
-            gcode_path (Path): Path to the GCode file to be processed
+            input_path (Path): Path to the GCode file to be processed
             output_path (Path): Path to save the processed GCode file
 
         Returns:
             Path: Path to the processed GCode file, ready for the next step in the pipeline
         """
-        super()._process(gcode_path, output_path)
+        super()._process(input_path, output_path)
 
-        with open(gcode_path, "r") as f:
+        with open(input_path, "r") as f:
             lines = f.readlines()
 
         if len(lines) == 0:
@@ -174,6 +178,8 @@ class LoopCloser(GCodeFilter):
         with open(output_path, "w") as f:
             f.writelines(lines)
 
+        return output_path
+
 
 class ResolutionReducer(GCodeFilter):
     """ResolutionReducer reduces the resolution of the GCode by removing points that fall within a certain distance of each other.
@@ -194,19 +200,19 @@ class ResolutionReducer(GCodeFilter):
 
         self.tolerance = tolerance
 
-    def _process(self, gcode_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input gcode file and return the output gcode file with reduced resolution.
 
         Args:
-            gcode_path (Path): Path to the GCode file to be processed
+            input_path (Path): Path to the GCode file to be processed
             output_path (Path): Path to save the processed GCode file
 
         Returns:
             Path: Path to the processed GCode file, ready for the next step in the pipeline
         """
-        super()._process(gcode_path, output_path)
+        super()._process(input_path, output_path)
 
-        with open(gcode_path, "r") as f:
+        with open(input_path, "r") as f:
             lines = f.readlines()
 
         new_lines = []
@@ -260,6 +266,8 @@ class ResolutionReducer(GCodeFilter):
         with open(output_path, "w") as f:
             f.writelines(new_lines)
 
+        return output_path
+
 
 class ColinearFilter(GCodeFilter):
     """ColinearFilter removes colinear points from the GCode.
@@ -276,19 +284,19 @@ class ColinearFilter(GCodeFilter):
 
         self.dot_product_threshold = dot_product_threshold
 
-    def _process(self, gcode_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input gcode file and return the output gcode file with colinear points removed.
 
         Args:
-            gcode_path (Path): Path to the GCode file to be processed
+            input_path (Path): Path to the GCode file to be processed
             output_path (Path): Path to save the processed GCode file
 
         Returns:
             Path: Path to the processed GCode file, ready for the next step in the pipeline
         """
-        super()._process(gcode_path, output_path)
+        super()._process(input_path, output_path)
 
-        with open(gcode_path, "r") as f:
+        with open(input_path, "r") as f:
             lines = f.readlines()
 
         starting_length = len(lines)
@@ -341,6 +349,8 @@ class ColinearFilter(GCodeFilter):
         ending_length = len(new_lines)
         print(f"Removed {starting_length - ending_length} colinear points.")
 
+        return output_path
+
     def calculate_nomralized_dot_product(self, p1, p2, p3):
         """Calculate the normalized dot product. Equal to the cosine of the angle between the two vectors.
 
@@ -382,20 +392,22 @@ class TSPOptimizer(GCodeFilter):
         """Initialize the TSPOptimizer."""
         super().__init__()
 
-    def _process(self, gcode_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input gcode file and return the output gcode file with the points optimized.
 
         Args:
-            gcode_path (Path): Path to the GCode file to be processed
+            input_path (Path): Path to the GCode file to be processed
             output_path (Path): Path to save the processed GCode file
 
         Returns:
             Path: Path to the processed GCode file, ready for the next step in the pipeline
         """
-        super()._process(gcode_path, output_path)
+        super()._process(input_path, output_path)
 
         # Construct the command to run the optimizer
         command = f"python {self.OPTIMIZER_PATH} --input_file {gcode_path} --output_file {output_path}"
 
         # Run the optimizer
         subprocess.run(command, shell=True)
+
+        return output_path
