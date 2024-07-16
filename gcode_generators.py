@@ -23,7 +23,7 @@ class Svg2GcodeGenerator(GCodeGenerator):
     https://github.com/sameer/svg2gcode.git
     """
 
-    SVG2GCODE_PATH = "~/efr/svg2gcode/Cargo.toml"
+    SVG2GCODE_PATH = "./modules/svg2gcode/Cargo.toml"
     PARALLELIZABLE = True
 
     def __init__(
@@ -48,7 +48,7 @@ class Svg2GcodeGenerator(GCodeGenerator):
         self.output_height = output_height
         self.circular_interpolation = circular_interpolation
 
-    def _process(self, image_path: Path, output_path: Path) -> None:
+    def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input svg image and return the output GCode
 
         Args:
@@ -56,16 +56,18 @@ class Svg2GcodeGenerator(GCodeGenerator):
 
         Returns: None
         """
-        super()._process(image_path, output_path)
+        super()._process(input_path, output_path)
 
         # Confirm that the input image exists
         if not image_path.exists():
-            raise FileNotFoundError(f"Image {image_path} not found.")
+            raise FileNotFoundError(f"Image {input_path} not found.")
 
         # Construct the command to convert the SVG to GCode
         command = f"cargo run --manifest-path {self.SVG2GCODE_PATH} --release -- "
         # Add arguments
-        command += f"{image_path} --circular-interpolation {'true' if self.circular_interpolation else 'false'} -o {output_path} --dimensions {self.output_width}mm,{self.output_height}mm --feedrate {self.feed_rate} --origin 0,0"
+        command += f"{input_path} --circular-interpolation {'true' if self.circular_interpolation else 'false'} -o {output_path} --dimensions {self.output_width}mm,{self.output_height}mm --feedrate {self.feed_rate} --origin 0,0"
 
         # Run the command
         subprocess.run(command, shell=True)
+
+        return output_path
