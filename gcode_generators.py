@@ -23,7 +23,7 @@ class Svg2GcodeGenerator(GCodeGenerator):
     https://github.com/sameer/svg2gcode.git
     """
 
-    SVG2GCODE_PATH = "./modules/svg2gcode/Cargo.toml"
+    SVG2GCODE_PATH = "svg2gcode"
     PARALLELIZABLE = True
 
     def __init__(
@@ -59,11 +59,11 @@ class Svg2GcodeGenerator(GCodeGenerator):
         super()._process(input_path, output_path)
 
         # Confirm that the input image exists
-        if not image_path.exists():
+        if not input_path.exists():
             raise FileNotFoundError(f"Image {input_path} not found.")
 
         # Construct the command to convert the SVG to GCode
-        command = f"cargo run --manifest-path {self.SVG2GCODE_PATH} --release -- "
+        command = f"{Svg2GcodeGenerator.SVG2GCODE_PATH} "
         # Add arguments
         command += f"{input_path} --circular-interpolation {'true' if self.circular_interpolation else 'false'} -o {output_path} --dimensions {self.output_width}mm,{self.output_height}mm --feedrate {self.feed_rate} --origin 0,0"
 
