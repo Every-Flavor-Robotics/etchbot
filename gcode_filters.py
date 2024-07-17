@@ -405,7 +405,7 @@ class TSPOptimizer(GCodeFilter):
         super()._process(input_path, output_path)
 
         # Construct the command to run the optimizer
-        command = f"python {self.OPTIMIZER_PATH} --input_file {gcode_path} --output_file {output_path}"
+        command = f"python {self.OPTIMIZER_PATH} --input_file {input_path} --output_file {output_path}"
 
         # Run the optimizer
         subprocess.run(command, shell=True)

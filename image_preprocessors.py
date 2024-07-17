@@ -47,7 +47,7 @@ class AspectRatioPreprocessor(ImagePreprocessor):
         """Process the input image and return the output image.
 
         Args:
-            image_path (Path): Path to the raw image to be processed
+            input_path (Path): Path to the raw image to be processed
             output_path (Path): Path to save the processed image
 
         Returns:
@@ -56,7 +56,7 @@ class AspectRatioPreprocessor(ImagePreprocessor):
         super()._process(input_path, output_path)
 
         # Confirm that the input image exists
-        if not image_path.exists():
+        if not input_path.exists():
             raise FileNotFoundError(f"Image {input_path} not found.")
 
         # Load the image
@@ -247,7 +247,7 @@ class CoherentLineDrawingPreprocessor(ImagePreprocessor):
         """Process the input image and return the output image.
 
         Args:
-            image_path (Path): Path to the raw image to be processed
+            input_path (Path): Path to the raw image to be processed
             output_path (Path): Path to save the processed image
 
         Returns: None
@@ -316,7 +316,7 @@ class DeNoisePreprocessor(ImagePreprocessor):
         """Process the input image and return the output image.
 
         Args:
-            image_path (Path): Path to the raw image to be processed
+            input_path (Path): Path to the raw image to be processed
             output_path (Path): Path to save the processed image
 
         Returns: None
@@ -377,7 +377,7 @@ class BlackAndWhitePreprocessor(ImagePreprocessor):
         """Process the input image and return the output image.
 
         Args:
-            image_path (Path): Path to the raw image to be processed
+            input_path (Path): Path to the raw image to be processed
             output_path (Path): Path to save the processed image
 
         Returns: None
@@ -424,7 +424,7 @@ class RemBGPreprocessor(ImagePreprocessor):
         """Process the input image and return the output image.
 
         Args:
-            image_path (Path): Path to the raw image to be processed
+            input_path (Path): Path to the raw image to be processed
             output_path (Path): Path to save the processed image
 
         Returns: None
@@ -467,7 +467,7 @@ class CartoonifyPreProcessor(ImagePreprocessor):
         """Process the input image and return the output image.
 
         Args:
-            image_path (Path): Path to the raw image to be processed
+            input_path (Path): Path to the raw image to be processed
             output_path (Path): Path to save the processed image
 
         Returns: None
@@ -522,7 +522,7 @@ class InformativeDrawingsPreprocessor(ImagePreprocessor):
             raise FileNotFoundError(f"Image {input_path} not found.")
 
         args = (
-            f"--input_file {input_path} --output_file {output_path} --name anime_style"
+            f"--input_path {input_path} --output_path {output_path} --name anime_style"
         )
 
         # Construct the command to run the Informative Drawings preprocessor
