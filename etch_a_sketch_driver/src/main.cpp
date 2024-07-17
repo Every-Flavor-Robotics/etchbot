@@ -40,8 +40,13 @@ typedef union
 #define MMPERMIN_TO_RADPERSEC RAD_PER_MM / 60.0
 #define ACCELERATION 16000
 #define MAX_ACCELERATION 25000
+#define UP_DOWN_BACKLASH_RAD 1.3 * RAD_PER_MM
+#define LEFT_RIGHT_BACKLASH_RAD 1.3 * RAD_PER_MM
+#define BACKLASH_COMEPSENATION_RADPERSEC 10.0
 // mm * RAD_PER_MM = rad
 #define ERROR_TOLERANCE 1.0 * RAD_PER_MM
+
+#define sign(x) ((x) < -0.0001 ? -1 : ((x) > 0.0001 ? 1 : 0))
 
 // Rad/s
 // #define OL_VELOCITY_LIMIT 15
@@ -92,6 +97,8 @@ MotorGo::PIDManager pid_manager;
 
 // Motor definitions
 
+std::atomic<float> left_right_position_target(0.0);
+std::atomic<float> up_down_position_target(0.0);
 std::atomic<float> up_down_velocity_target(0.0);
 std::atomic<float> left_right_velocity_target(0.0);
 std::atomic<float> up_down_acceleration_target(0.0);
@@ -191,8 +198,11 @@ void setup()
   // Configure onboard button as input
   pinMode(0, INPUT_PULLUP);
 
-  //   Serial.begin(5000000);
-  //   delay(3000);
+  Serial.begin(5000000);
+  while (!Serial)
+  {
+    delay(50);
+  }
 
   // Setup motor parameters
   config_ch0.motor_config = GARTTLeftTronix;
@@ -289,17 +299,16 @@ void setup()
   left_right.init(config_ch0, calibrate);
   up_down.init(config_ch1, calibrate);
 
-  //   Set closed-loop velocity mode
   left_right.set_control_mode(MotorGo::ControlMode::Voltage);
   up_down.set_control_mode(MotorGo::ControlMode::Voltage);
 
-  pid_manager.init("EFR_test", "verysecurepassword");
+  pid_manager.init("NotARobot", "M1crowave!");
 
   // Start the WebSocket server
   //   webSocket.begin();
   //   webSocket.onEvent(webSocketEvent);
 
-  stream = new GCode::WifiGCodeStream("10.42.0.213", 50);
+  stream = new GCode::WifiGCodeStream("192.168.10.15", 50);
   parser = new GCode::GCodeParser(stream, 2000);
 
   GCode::start_parser(*parser);
@@ -326,12 +335,15 @@ void setup()
 }
 
 float target = 0.0;
-// Chrono microsChrono(Chrono::MICROS);
 unsigned int i = 0;
+MotorGo::ControlMode left_right_cur_control_mode =
+    MotorGo::ControlMode::Voltage;
+MotorGo::ControlMode up_down_cur_control_mode = MotorGo::ControlMode::Voltage;
+
 void loop_foc(void* pvParameters)
 {
-  //   Serial.print("Loop FOC running on core ");
-  //   Serial.println(xPortGetCoreID());
+  Serial.print("Loop FOC running on core ");
+  Serial.println(xPortGetCoreID());
 
   for (;;)
   {
@@ -379,10 +391,24 @@ void loop_foc(void* pvParameters)
     // If in OL mode, simply set the target velocity
     if (left_right_ol_mode.load())
     {
-      left_right.set_target_velocity(local_lr_vel_target);
+      if (left_right_cur_control_mode != MotorGo::ControlMode::PositionOpenLoop)
+      {
+        left_right.set_control_mode(MotorGo::ControlMode::PositionOpenLoop);
+        left_right_cur_control_mode = MotorGo::ControlMode::PositionOpenLoop;
+      }
+      left_right.set_target_position(left_right_position_target.load());
+
+      //   Serial.println("Setting open loop position: " +
+      //                  String(left_right_position_target.load()));
     }
     else
     {
+      if (left_right_cur_control_mode != MotorGo::ControlMode::Voltage)
+      {
+        left_right.set_control_mode(MotorGo::ControlMode::Voltage);
+        left_right_cur_control_mode = MotorGo::ControlMode::Voltage;
+      }
+
       // Else update controller and set target voltage
       // Update PID controllers
       float lr_command =
@@ -395,10 +421,22 @@ void loop_foc(void* pvParameters)
 
     if (up_down_ol_mode.load())
     {
-      up_down.set_target_velocity(local_ud_vel_target);
+      if (up_down_cur_control_mode != MotorGo::ControlMode::PositionOpenLoop)
+      {
+        up_down.set_control_mode(MotorGo::ControlMode::PositionOpenLoop);
+        up_down_cur_control_mode = MotorGo::ControlMode::PositionOpenLoop;
+      }
+
+      up_down.set_target_position(up_down_position_target.load());
     }
     else
     {
+      if (up_down_cur_control_mode != MotorGo::ControlMode::Voltage)
+      {
+        up_down.set_control_mode(MotorGo::ControlMode::Voltage);
+        up_down_cur_control_mode = MotorGo::ControlMode::Voltage;
+      }
+
       float ud_command =
           up_down_ff_accel_gain * local_ud_accel_target +
           up_down_ff_velocity_gain * local_ud_vel_target +
@@ -423,6 +461,11 @@ void loop_foc(void* pvParameters)
 }
 
 Planner::TrapezoidVelocityTrajectory cur_trajectory;
+Planner::Direction left_right_previous_direction = Planner::Direction::BACKWARD;
+Planner::Direction up_down_previous_direction = Planner::Direction::BACKWARD;
+float left_right_backlash_offset = 0;
+float up_down_backlash_offset = 0;
+
 float last_final_x = 0;
 float last_final_y = 0;
 GCode::MotionCommand command1;
@@ -442,6 +485,7 @@ unsigned long last_loop_time = 0;
 bool first = true;
 
 int parser_test = 0;
+
 void loop()
 {
   // Safety conditions
@@ -462,6 +506,8 @@ void loop()
     next_command = temp_command;
     next_command_ready = false;
 
+    // Serial.println("Getting next command!");
+
     //   Ignore the rest of the command, run the homing procedure
     if (current_command->home)
     {
@@ -470,6 +516,11 @@ void loop()
     //   Otherwise, generate a trapezoid profile
     else
     {
+      //   Serial.println("Replan with");
+      //   Serial.println("X: " + String(current_command->x));
+      //   Serial.println("Y: " + String(current_command->y));
+
+      //   delay(3000);
       // Force a replan when we have a new command
       foc_loops.store(replan_horizon);
       state.is_complete = false;
@@ -481,17 +532,33 @@ void loop()
 
   //   Update position based on current velocity
   //   Generate a new profile
-  if (foc_loops.load() >= replan_horizon)
+  //   Wait for the backlash compensation phase to finish before replanning
+  if (foc_loops.load() >= replan_horizon && !state.backlash_compensation_phase)
   {
     unsigned long trajectory_start_time = micros();
     Planner::TrapezoidTrajectoryParameters profile;
-    profile.x_initial = left_right.get_position();
-    profile.y_initial = up_down.get_position();
+    // Serial.println("position: " + String(left_right.get_position()) + "\t" +
+    //                left_right_backlash_offset);
+
+    // Serial.println("position y: " + String(up_down.get_position()) + "\t" +
+    //                up_down_backlash_offset);
+    profile.x_initial = left_right.get_position() + left_right_backlash_offset;
+    profile.y_initial = up_down.get_position() + up_down_backlash_offset;
+    profile.previous_left_right_direction = left_right_previous_direction;
+    profile.previous_up_down_direction = up_down_previous_direction;
+    profile.backlash_compensation = true;
+    profile.left_right_backlash_compensation_distance = LEFT_RIGHT_BACKLASH_RAD;
+    profile.up_down_backlash_compensation_distance = UP_DOWN_BACKLASH_RAD;
+    profile.backlash_compensation_velocity = BACKLASH_COMEPSENATION_RADPERSEC;
 
     profile.x_final =
-        constrain(current_command->x * RAD_PER_MM, 0, X_LIM * RAD_PER_MM);
+        constrain(current_command->x * RAD_PER_MM + left_right_backlash_offset,
+                  0, X_LIM * RAD_PER_MM);
     profile.y_final =
-        constrain(current_command->y * RAD_PER_MM, 0, Y_LIM * RAD_PER_MM);
+        constrain(current_command->y * RAD_PER_MM + up_down_backlash_offset, 0,
+                  Y_LIM * RAD_PER_MM);
+
+    //
 
     // Compute current velocity magnitude
     float current_velocity =
@@ -509,6 +576,29 @@ void loop()
         Planner::generate_trapezoid_profile(profile, ERROR_TOLERANCE);
     cur_trajectory.start_time_us = trajectory_start_time;
 
+    // Update backlash offset
+    left_right_backlash_offset +=
+        sign(cur_trajectory.v_backlash_left_right) * LEFT_RIGHT_BACKLASH_RAD;
+
+    up_down_backlash_offset +=
+        sign(cur_trajectory.v_backlash_up_down) * UP_DOWN_BACKLASH_RAD;
+
+    // Serial.println(sign(cur_trajectory.v_backlash_left_right));
+    // Serial.println(sign(cur_trajectory.v_backlash_up_down));
+
+    // Serial.println("Left Right Backlash Offset: " +
+    //                String(left_right_backlash_offset));
+
+    // Serial.println("Up Down Backlash Offset: " +
+    //                String(up_down_backlash_offset));
+
+    // Serial.println("Left_right previous " +
+    //                String(left_right_previous_direction));
+    // Serial.println("Up_down previous " + String(up_down_previous_direction));
+
+    left_right_previous_direction = cur_trajectory.left_right_direction;
+    up_down_previous_direction = cur_trajectory.up_down_direction;
+
     foc_loops.store(0);
   }
 
@@ -516,30 +606,44 @@ void loop()
   unsigned long now = micros();
   state = Planner::compute_trapezoid_velocity_vector(cur_trajectory, now);
 
-  float accel_x =
-      (state.v.x - previous_velocity_x) / (now - previous_loop_time) * 1e6;
-  float accel_y =
-      (state.v.y - previous_velocity_y) / (now - previous_loop_time) * 1e6;
-
-  float accel = sqrt(pow(accel_x, 2) + pow(accel_y, 2));
-  if (accel > MAX_ACCELERATION)
+  if (state.backlash_compensation_phase)
   {
-    // Serial.println("Acceleration too high: " + String(accel));
-    // Scale down the velocity
-    state.a.x = (MAX_ACCELERATION / accel) * state.a.x;
-    state.a.y = (MAX_ACCELERATION / accel) * state.a.y;
-    state.v.x = previous_velocity_x +
-                (MAX_ACCELERATION / accel) * (state.v.x - previous_velocity_x);
+    left_right_position_target.store(state.p.x);
+    up_down_position_target.store(state.p.y);
 
-    state.v.y = previous_velocity_y +
-                (MAX_ACCELERATION / accel) * (state.v.y - previous_velocity_y);
+    left_right_ol_mode.store(true);
+    up_down_ol_mode.store(true);
   }
+  else
+  {
+    float accel_x =
+        (state.v.x - previous_velocity_x) / (now - previous_loop_time) * 1e6;
+    float accel_y =
+        (state.v.y - previous_velocity_y) / (now - previous_loop_time) * 1e6;
 
-  left_right_velocity_target.store(state.v.x);
-  up_down_velocity_target.store(state.v.y);
+    float accel = sqrt(pow(accel_x, 2) + pow(accel_y, 2));
+    if (accel > MAX_ACCELERATION)
+    {
+      // Serial.println("Acceleration too high: " + String(accel));
+      // Scale down the velocity
+      state.a.x = (MAX_ACCELERATION / accel) * state.a.x;
+      state.a.y = (MAX_ACCELERATION / accel) * state.a.y;
+      state.v.x = previous_velocity_x + (MAX_ACCELERATION / accel) *
+                                            (state.v.x - previous_velocity_x);
 
-  left_right_acceleration_target.store(state.a.x);
-  up_down_acceleration_target.store(state.a.y);
+      state.v.y = previous_velocity_y + (MAX_ACCELERATION / accel) *
+                                            (state.v.y - previous_velocity_y);
+    }
+
+    left_right_velocity_target.store(state.v.x);
+    up_down_velocity_target.store(state.v.y);
+
+    left_right_acceleration_target.store(state.a.x);
+    up_down_acceleration_target.store(state.a.y);
+
+    left_right_ol_mode.store(false);
+    up_down_ol_mode.store(false);
+  }
 
   previous_velocity_x = state.v.x;
   previous_velocity_y = state.v.y;
@@ -559,10 +663,13 @@ void loop()
       next_command->home = result.command.home;
       next_command_ready = true;
 
+      //   Serial.println("Next command ready");
+      //   delay(5000);
+
       if (first)
       {
         first = false;
-        // Serial.println("Waiting to preprocess all data");
+        Serial.println("Waiting to preprocess all data");
         vTaskDelay(3000 / portTICK_PERIOD_MS);
         left_right.enable();
         up_down.enable();
