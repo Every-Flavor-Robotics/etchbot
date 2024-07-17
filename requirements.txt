@@ -1,13 +1,13 @@
 backgroundremover==0.2.8
 click==8.1.7
 ffmpeg-python==0.2.0
-filelock @ file:///work/perseverance-python-buildout/croot/filelock_1701733993137/work
+filelock==3.15.4
 Flask==3.0.2
 ipdb==0.13.13
 matplotlib==3.8.4
-matplotlib-inline @ file:///home/conda/feedstock_root/build_artifacts/matplotlib-inline_1713250518406/work
 networkx==3.2.1
 onnxruntime==1.17.3
+onnxruntime-gpu==1.17.1
 opencv-python==4.10.0.82
 opencv-python-headless==4.9.0.80
 pandas==2.2.2
