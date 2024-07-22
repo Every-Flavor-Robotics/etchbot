@@ -32,7 +32,7 @@ class WifiGCodeStream : public GCodeStream
 
  private:
   const String server_ip;
-  const int socket_port = 5000;
+  const int socket_port = 5005;
   WiFiClient client;
   size_t max_buffer_len;
 
@@ -44,7 +44,7 @@ class WifiGCodeStream : public GCodeStream
   String next_line;
 
   HTTPClient http;
-  const int rest_port = 5001;
+  const int rest_port = 5010;
 
   bool server_ready();
   bool ready_for_next_gcode = false;
