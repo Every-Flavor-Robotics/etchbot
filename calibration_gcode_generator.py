@@ -56,7 +56,7 @@ lines.append(f"G1 X0 Y0 F{FEEDRATE}")
 lines.extend(end)
 
 # Write the lines to a file
-with open("test_circle.gcode", "w") as f:
+with open("test_circle.optgcode", "w") as f:
     f.write("\n".join(lines))
 
-print("File written to test_circle.gcode")
+print("File written to test_circle.optgcode")
