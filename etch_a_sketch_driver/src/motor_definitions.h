@@ -17,7 +17,7 @@ const MotorGo::MotorConfiguration GARTTLeftTronix(11,        // pole_pairs
                                                   3.5,       // voltage_limit
                                                   5.5f,      // current_limit
                                                   10000.0f,  // velocity_limit
-                                                  0.2f  // calibration_voltage
+                                                  1.0f  // calibration_voltage
 );
 
 const MotorGo::MotorConfiguration GARTTRightTronix(11,       // pole_pairs
@@ -27,7 +27,7 @@ const MotorGo::MotorConfiguration GARTTRightTronix(11,       // pole_pairs
                                                    3.5,      // voltage_limit
                                                    5.5f,     // current_limit
                                                    10000.0f,  // velocity_limit
-                                                   0.2f  // calibration_voltage
+                                                   1.0f  // calibration_voltage
 );
 
 // PID PARAMETERS
