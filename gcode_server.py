@@ -171,7 +171,7 @@ def gcode_available():
             return "", 204
 
 
-def start_gcode_server(host="0.0.0.0", port=5000):
+def start_gcode_server(host="0.0.0.0", port=5005):
     # Print in green, starting the GCode server
     secho("GCode Streamer: Starting up", fg="green")
     print("\tGCode Streamer: Host:", host)
@@ -188,7 +188,7 @@ def run_gcode_server(scan_directory, run_flask=True):
     if run_flask:
         app = Flask(__name__)
         app.register_blueprint(gcode_blueprint)
-        app.run("0.0.0.0", port=5001, use_reloader=False, debug=False)
+        app.run("0.0.0.0", port=5010, use_reloader=False, debug=False)
 
 
 @click.command()
