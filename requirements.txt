@@ -3,6 +3,7 @@ click==8.1.7
 ffmpeg-python==0.2.0
 filelock==3.15.4
 Flask==3.0.2
+flask_cors==4.0.1
 ipdb==0.13.13
 matplotlib==3.8.4
 networkx==3.2.1
@@ -19,3 +20,4 @@ scikit-image==0.22.0
 scikit-learn==1.4.1.post1
 scipy==1.12.0
 tqdm==4.66.4
+transitions==0.9.1
