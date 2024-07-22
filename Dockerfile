@@ -41,8 +41,10 @@ RUN ./install.sh
 # Update Path to include the rust binaries
 ENV PATH="/app/modules/svg2gcode/target/release:${PATH}"
 
+
 # Run example picture with cli, this will ensure that the models are all downloaded
-RUN python3 -m etch_a_sketch.cli -i examples/hot_dog.png --output hot_dog --copy
+
+RUN python3 etch_a_sketch_cli.py -i examples/hot_dog.png -o hot_dog --copy
 
 # Set the default command to run when the container starts
-# CMD ["python", "etch_a_sketch_server.py"]
+CMD ["python", "etch_a_sketch_server.py"]
