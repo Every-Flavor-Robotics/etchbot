@@ -31,7 +31,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --de
 
 # Copy the source code into the container
 COPY . /app
-RUN mkdir /app/pipeline_output
+RUN rm -rf /app/pipeline_output && mkdir /app/pipeline_output
 WORKDIR /app
 
 # Run setup script
