@@ -60,8 +60,8 @@ TaskHandle_t loop_foc_task;
 TickType_t xLastWakeTime;
 void loop_foc(void* pvParameters);
 MotorGo::MotorGoMini motorgo_mini;
-MotorGo::MotorChannel& left_right = motorgo_mini.ch0;
-MotorGo::MotorChannel& up_down = motorgo_mini.ch1;
+MotorGo::MotorChannel& left_right = motorgo_mini.ch1;
+MotorGo::MotorChannel& up_down = motorgo_mini.ch0;
 
 MotorGo::ChannelConfiguration config_ch0;
 MotorGo::ChannelConfiguration config_ch1;
