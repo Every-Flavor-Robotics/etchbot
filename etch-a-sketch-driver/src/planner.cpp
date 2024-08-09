@@ -3,6 +3,17 @@
 #include <Arduino.h>
 
 #include <chrono>
+// void freq_println(String str, int freq)
+// {
+//   static unsigned long last_print_time = 0;
+//   unsigned long now = millis();
+
+//   if (now - last_print_time > 1000 / freq)
+//   {
+//     Serial.println(str);
+//     last_print_time = now;
+//   }
+// }
 
 Planner::TrapezoidVelocityTrajectory Planner::generate_trapezoid_profile(
     Planner::TrapezoidTrajectoryParameters args, float error_tolerance)
@@ -10,11 +21,27 @@ Planner::TrapezoidVelocityTrajectory Planner::generate_trapezoid_profile(
   // Calculate the distance between the initial and final points
   float dx = args.x_final - args.x_initial;
   float dy = args.y_final - args.y_initial;
+
+  //   if (abs(dx) < 0.25)
+  //   {
+  //     dx = 0;
+  //   }
+
+  //   if (abs(dy) < 0.25)
+  //   {
+  //     dy = 0;
+  //   }
+
+  //   String str = "dx: " + String(dx, 5) + " dy: " + String(dy, 5);
+  //   freq_println(str, 100);
+
   float d_total = sqrt(dx * dx + dy * dy);
 
   //   Construct profile
   Planner::TrapezoidVelocityTrajectory profile;
 
+  profile.dx = dx;
+  profile.dy = dy;
   profile.x_initial = args.x_initial;
   profile.y_initial = args.y_initial;
 
@@ -30,6 +57,12 @@ Planner::TrapezoidVelocityTrajectory Planner::generate_trapezoid_profile(
     profile.up_down_direction = args.previous_up_down_direction;
     profile.v_backlash_left_right = 0;
     profile.v_backlash_up_down = 0;
+
+    // Serial.println("Distance is less than error tolerance");
+    // // Print x, x_final, dx
+    // Serial.println("Initial x: " + String(args.x_initial, 5));
+    // Serial.println("Final x: " + String(args.x_final, 5));
+    // Serial.println("dx: " + String(dx, 5));
 
     // Serial.println("-------------- In planner -----------------");
     // Serial.println("Backlash compensation: " +
@@ -156,7 +189,17 @@ Planner::TrapezoidVelocityTrajectory Planner::generate_trapezoid_profile(
     }
 
     profile.backlash_compensation_time_delta_us =
-        backlash_compensation_time_delta * 1e6;
+        (backlash_compensation_time_delta) * 1e6;
+
+    if (profile.backlash_compensation_time_delta_us > 0)
+    {
+      profile.backlash_pause_time_delta_us = 5e5;
+    }
+    else
+    {
+      profile.v_backlash_left_right = 0;
+      profile.v_backlash_up_down = 0;
+    }
   }
 
   // Velocity mutliplier to ensure that at least one of the components
@@ -236,8 +279,11 @@ Planner::TrapezoidVelocityTrajectory Planner::generate_trapezoid_profile(
     t_coast = (d_total - d_accel - d_decel) / args.v_target;
   }
 
+  profile.backlash_pause_time_delta_us =
+      profile.backlash_compensation_time_delta_us +
+      profile.backlash_pause_time_delta_us;
   profile.acceleration_time_delta_us =
-      (t_accel * 1e6) + profile.backlash_compensation_time_delta_us;
+      (t_accel * 1e6) + profile.backlash_pause_time_delta_us;
   profile.coast_end_time_delta_us =
       profile.acceleration_time_delta_us + (t_coast * 1e6);
   profile.end_time_delta_us = profile.coast_end_time_delta_us + (t_decel * 1e6);
@@ -251,9 +297,6 @@ Planner::TrapezoidVelocityTrajectory Planner::generate_trapezoid_profile(
   //   Serial.println("-------------- In planner -----------------");
   //   Serial.println("Backlash compensation: " +
   //                  String(args.backlash_compensation));
-  //   Serial.println("Backlash compensation time: " +
-  //                  String(profile.backlash_compensation_time_delta_us) +
-  //                  "us");
   //   Serial.println("Left right backlash compensation velocity: " +
   //                  String(profile.v_backlash_left_right) + " mm/s");
   //   Serial.println("Up down backlash compensation velocity: " +
@@ -286,15 +329,44 @@ Planner::TrapezoidVelocityTrajectory Planner::generate_trapezoid_profile(
 
   //   Serial.println("Angle: " + String(profile.angle, 5) + "rad");
 
+  //   //   Print all time deltas
+  //   Serial.println("Backlash compensation time: " +
+  //                  String(profile.backlash_compensation_time_delta_us) +
+  //                  "us");
+
+  //   Serial.println("Backlash pause time: " +
+  //                  String(profile.backlash_pause_time_delta_us) + "us");
+
+  //   Serial.println("Acceleration time: " +
+  //                  String(profile.acceleration_time_delta_us) + "us");
+
+  //   Serial.println("Coast end time: " +
+  //   String(profile.coast_end_time_delta_us) +
+  //                  "us");
+
+  //   Serial.println("End time: " + String(profile.end_time_delta_us) + "us");
+
   //   Serial.println("-------------- In planner -----------------");
 
   return profile;
 }
 
 Planner::TrajectoryState Planner::compute_trapezoid_velocity_vector(
-    Planner::TrapezoidVelocityTrajectory& profile, unsigned long time_us)
+    Planner::TrapezoidVelocityTrajectory& profile, unsigned long time_us,
+    float OL_THRESHOLD)
 {
   TrajectoryState state;
+  state.left_right_ol = abs(profile.dx) < OL_THRESHOLD && profile.dx != 0;
+  state.up_down_ol = abs(profile.dy) < OL_THRESHOLD && profile.dy != 0;
+
+  state.p.x = 0;
+  state.p.y = 0;
+  state.v.x = 0;
+  state.v.y = 0;
+  state.a.x = 0;
+  state.a.y = 0;
+
+  float p_target;
   float v_target;
   float a_target;
 
@@ -322,6 +394,9 @@ Planner::TrajectoryState Planner::compute_trapezoid_velocity_vector(
   {
     //   Backlash compensation phase
     state.backlash_compensation_phase = true;
+    state.up_down_ol = true;
+    state.left_right_ol = true;
+
     // Skip remaining calculations, directly set backlash compensation
     state.p.x = profile.v_backlash_left_right * t + profile.x_initial;
     state.p.y = profile.v_backlash_up_down * t + profile.y_initial;
@@ -331,9 +406,29 @@ Planner::TrajectoryState Planner::compute_trapezoid_velocity_vector(
     return state;
   }
 
+  //   Backlash pause phase
+  else if (t_us <= profile.backlash_pause_time_delta_us)
+  {
+    state.backlash_compensation_phase = true;
+    state.up_down_ol = true;
+    state.left_right_ol = true;
+
+    // Switch back to regular operation, set velocity to 0
+    float backlash_final_time =
+        profile.backlash_compensation_time_delta_us / 1e6;
+
+    state.p.x =
+        profile.v_backlash_left_right * backlash_final_time + profile.x_initial;
+    state.p.y =
+        profile.v_backlash_up_down * backlash_final_time + profile.y_initial;
+
+    return state;
+  }
+
   // Constant acceleration phase
   else if (t_us <= profile.acceleration_time_delta_us)
   {
+    p_target = 0.5 * profile.a_target * t * t + profile.v_initial * t;
     //   Acceleration phase
     v_target = profile.v_initial + profile.a_target * t;
     a_target = profile.a_target;
@@ -341,6 +436,12 @@ Planner::TrajectoryState Planner::compute_trapezoid_velocity_vector(
   //   Constant velocity phase
   else if (t_us <= profile.coast_end_time_delta_us)
   {
+    float acceleration_time = profile.acceleration_time_delta_us / 1e6;
+
+    p_target = 0.5 * profile.a_target * acceleration_time * acceleration_time +
+               profile.v_initial * acceleration_time +
+               profile.v_target * (t - acceleration_time);
+
     //   Constant velocity phase
     v_target = profile.v_target;
     a_target = 0;
@@ -348,6 +449,18 @@ Planner::TrajectoryState Planner::compute_trapezoid_velocity_vector(
   //   Deceleration phase
   else if (t_us <= profile.end_time_delta_us)
   {
+    float acceleration_time = profile.acceleration_time_delta_us / 1e6;
+    float constant_velocity_time = profile.coast_end_time_delta_us / 1e6;
+
+    p_target =
+        0.5 * profile.a_target * acceleration_time * acceleration_time +
+        profile.v_initial * acceleration_time +
+        profile.v_target * constant_velocity_time +
+        profile.v_target * (t - constant_velocity_time - acceleration_time) -
+        0.5 * profile.a_target *
+            (t - constant_velocity_time - acceleration_time) *
+            (t - constant_velocity_time - acceleration_time);
+
     //   Deceleration phase
     v_target = profile.v_target -
                profile.a_target * (t - profile.coast_end_time_delta_us / 1e6);
@@ -361,8 +474,27 @@ Planner::TrajectoryState Planner::compute_trapezoid_velocity_vector(
     state.is_complete = true;
   }
 
-  state.v.x = v_target * cos(profile.angle);
-  state.v.y = v_target * sin(profile.angle);
+  if (state.left_right_ol)
+  {
+    state.v.x = 0;
+    state.p.x = profile.v_backlash_left_right * t + profile.x_initial +
+                p_target * cos(profile.angle);
+  }
+  else
+  {
+    state.v.x = v_target * cos(profile.angle);
+  }
+
+  if (state.up_down_ol)
+  {
+    state.v.y = 0;
+    state.p.y = profile.v_backlash_up_down * t + profile.y_initial +
+                p_target * sin(profile.angle);
+  }
+  else
+  {
+    state.v.y = v_target * sin(profile.angle);
+  }
   state.a.x = a_target * cos(profile.angle);
   state.a.y = a_target * sin(profile.angle);
 

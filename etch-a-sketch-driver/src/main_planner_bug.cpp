@@ -40,11 +40,11 @@ typedef union
 #define MMPERMIN_TO_RADPERSEC (RAD_PER_MM / 60.0)
 #define ACCELERATION 16000
 #define MAX_ACCELERATION 25000
-#define UP_DOWN_BACKLASH_RAD (1.3 * RAD_PER_MM)
-#define LEFT_RIGHT_BACKLASH_RAD (2.0 * RAD_PER_MM)
+#define UP_DOWN_BACKLASH_RAD (1.35 * RAD_PER_MM)
+#define LEFT_RIGHT_BACKLASH_RAD (1.8 * RAD_PER_MM)
 #define BACKLASH_COMEPSENATION_RADPERSEC 10.0
 // mm * RAD_PER_MM = rad
-#define ERROR_TOLERANCE (0.6f * RAD_PER_MM)
+#define ERROR_TOLERANCE (0.8 * RAD_PER_MM)
 #define OL_THRESHOLD (0.2f * RAD_PER_MM)
 
 #define ENABLED
@@ -58,9 +58,6 @@ size_t replan_horizon = 1;
 
 #define X_LIM 130
 #define Y_LIM 89.375
-
-// #define X_LIM 70
-// #define Y_LIM 30
 
 TaskHandle_t loop_foc_task;
 TickType_t xLastWakeTime;
@@ -98,7 +95,10 @@ MotorGo::PIDParameters planner_lpf_params;
 LowPassFilter planner_left_right_velocity_lpf(0.000);
 LowPassFilter planner_up_down_velocity_lpf(0.000);
 
+// declare PID manager object
 MotorGo::PIDManager pid_manager;
+
+// Motor definitions
 
 std::atomic<float> left_right_position_target(0.0);
 std::atomic<float> up_down_position_target(0.0);
@@ -122,32 +122,15 @@ bool motors_enabled = false;
 ESPWifiConfig::Configurable<bool> enable_motors(motors_enabled, "/enable",
                                                 "Enable motors");
 
-WebSocketsServer webSocket =
-    WebSocketsServer(1234);  // Use a standard WebSocket port (e.g., 8080)
-
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
+void freq_println(String str, int freq)
 {
-  switch (type)
+  static unsigned long last_print_time = 0;
+  unsigned long now = millis();
+
+  if (now - last_print_time > 1000 / freq)
   {
-    case WStype_DISCONNECTED:
-      //   Serial.printf("[%u] Disconnected!\n", num);
-      break;
-    case WStype_CONNECTED:
-    {
-      IPAddress ip = webSocket.remoteIP(num);
-      //   Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num,
-      //   ip[0],
-      //                 ip[1], ip[2], ip[3], payload);
-    }
-    break;
-    case WStype_TEXT:
-      // Handle incoming text messages (you likely won't need this for your data
-      // streaming)/
-      break;
-    case WStype_BIN:
-      // We'll assume you send your data in binary format
-      //   handleBinaryData(num, payload, length);
-      break;
+    Serial.println(str);
+    last_print_time = now;
   }
 }
 
@@ -493,18 +476,18 @@ unsigned long previous_loop_time = 0;
 
 unsigned long last_loop_time = 0;
 bool first = true;
-bool run_started = false;
+
 int parser_test = 0;
 
 void loop()
 {
   // Safety conditions
-  if (left_right.get_position() > (X_LIM + 4) * RAD_PER_MM ||
-      left_right.get_position() < -4 * RAD_PER_MM ||
-      up_down.get_position() > (Y_LIM + 4) * RAD_PER_MM ||
-      up_down.get_position() < -4 * RAD_PER_MM)
+  if (left_right.get_position() > (X_LIM + 8) * RAD_PER_MM ||
+      left_right.get_position() < -8 * RAD_PER_MM ||
+      up_down.get_position() > (Y_LIM + 8) * RAD_PER_MM ||
+      up_down.get_position() < -8 * RAD_PER_MM)
   {
-    Serial.println("Position out of bounds");
+    // Serial.println("Position out of bounds");
     disable_flag = true;
   }
 
@@ -515,6 +498,15 @@ void loop()
     current_command = next_command;
     next_command = temp_command;
     next_command_ready = false;
+
+    // delay(1000);
+
+    float rad = left_right.get_position();
+    float mm = rad / (RAD_PER_MM);
+
+    // Print final position in rad and mm
+    // Serial.println("Final position: " + String(rad, 5) + "rad, " +
+    //                String(mm, 5));
 
     // Serial.println("Getting next command!");
 
@@ -527,7 +519,7 @@ void loop()
     else
     {
       //   Serial.println("Replan with");
-      //   Serial.println("X: " + String(current_command->x));
+      //   Serial.println("COMMAND X: " + String(current_command->x));
       //   Serial.println("Y: " + String(current_command->y));
 
       //   delay(3000);
@@ -568,6 +560,13 @@ void loop()
         constrain(current_command->y * RAD_PER_MM + up_down_backlash_offset, 0,
                   Y_LIM * RAD_PER_MM);
 
+    // Print target in rad and mm
+
+    // String test = "position: " + String(profile.x_final, 5) + "rad, " +
+    //               String(profile.x_final / (RAD_PER_MM), 5) + "mm";
+
+    // freq_println(test, 10);
+
     // Compute current velocity magnitude
     float current_velocity =
         sqrt(pow(cur_left_right_velocity, 2) + pow(cur_up_down_velocity, 2));
@@ -583,6 +582,10 @@ void loop()
     cur_trajectory =
         Planner::generate_trapezoid_profile(profile, ERROR_TOLERANCE);
     cur_trajectory.start_time_us = trajectory_start_time;
+
+    // delay(10000);
+
+    // trajectory_start_time = micros();
 
     // Update backlash offset
     left_right_backlash_offset +=
@@ -634,7 +637,7 @@ void loop()
                 (MAX_ACCELERATION / accel) * (state.v.y - previous_velocity_y);
   }
 
-  if (state.left_right_ol && run_started)
+  if (state.left_right_ol)
   {
     left_right_position_target.store(state.p.x);
   }
@@ -644,7 +647,7 @@ void loop()
     left_right_acceleration_target.store(state.a.x);
   }
 
-  if (state.up_down_ol && run_started)
+  if (state.up_down_ol)
   {
     up_down_position_target.store(state.p.y);
   }
@@ -654,8 +657,8 @@ void loop()
     up_down_acceleration_target.store(state.a.y);
   }
 
-  left_right_ol_mode.store(state.left_right_ol && run_started);
-  up_down_ol_mode.store(state.up_down_ol && run_started);
+  left_right_ol_mode.store(state.left_right_ol);
+  up_down_ol_mode.store(state.up_down_ol);
 
   previous_velocity_x = state.v.x;
   previous_velocity_y = state.v.y;
@@ -674,7 +677,6 @@ void loop()
       next_command->feedrate = result.command.feedrate;
       next_command->home = result.command.home;
       next_command_ready = true;
-      run_started = true;
 
       //   Serial.println("Next command ready");
       //   delay(5000);

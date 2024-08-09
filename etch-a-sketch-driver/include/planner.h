@@ -60,12 +60,17 @@ struct TrapezoidVelocityTrajectory
   unsigned long start_time_us = 0;
   // Time from start for backlash compensation
   unsigned long backlash_compensation_time_delta_us = 0;
+  // Time from start for backlash pause - zero velocity to reset stiction
+  unsigned long backlash_pause_time_delta_us = 0;
   //   Time from start for constant acceleration
   unsigned long acceleration_time_delta_us = 0;
   //   Time from start for constant velocity
   unsigned long coast_end_time_delta_us = 0;
   //   Time from start for constant deceleration
   unsigned long end_time_delta_us = 0;
+
+  float dx = 0;
+  float dy = 0;
 
   float angle;
   float v_initial;
@@ -87,6 +92,9 @@ struct TrapezoidVelocityTrajectory
 struct TrajectoryState
 {
   bool backlash_compensation_phase = false;
+  //   Whether or not we should use OL positon
+  bool left_right_ol = false;
+  bool up_down_ol = false;
   PositionVector p;
   VelocityVector v;
   AccelerationVector a;
@@ -97,7 +105,8 @@ TrapezoidVelocityTrajectory generate_trapezoid_profile(
     TrapezoidTrajectoryParameters args, float error_tolerance);
 
 TrajectoryState compute_trapezoid_velocity_vector(
-    TrapezoidVelocityTrajectory& profile, unsigned long time_us);
+    TrapezoidVelocityTrajectory& profile, unsigned long time_us,
+    float OL_THRESHOLD);
 
 }  // namespace Planner
 #endif  // PLANNER_H
