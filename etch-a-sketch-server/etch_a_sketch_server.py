@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pathlib import Path
+import datetime
 import io
 import threading
 import time
@@ -11,6 +12,7 @@ from gcode_server import (
     gcode_blueprint,
     run_gcode_server,
 )
+from etchbot import EtchBot
 
 UPLOAD_DIR = Path("uploads")
 PROCESSING_DIR = Path("processing")
@@ -27,11 +29,15 @@ SUPPORTED_FILE_TYPES = (
     + SUPPORTED_OPTIMIZED_GCODE_TYPES
 )
 
+# Dictionary to store EtchBot instances
+etchbots = {}
+
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 app.register_blueprint(gcode_blueprint)
 
 
+###### User facing API ######
 @app.route("/upload", methods=["POST"])
 def upload_file():
     try:
@@ -86,6 +92,9 @@ def process_files():
         time.sleep(1)
 
 
+### EtchBot API ###
+
+
 def gcode_server():
     print("GCode server started.")
     command = "python gcode_server.py --gcode_dir gcode_outputs"
@@ -95,6 +104,39 @@ def gcode_server():
     # Wait for the subprocess to finish
     print("GCode server finished.")
     time.sleep(1)
+
+
+@app.route("/update_state", methods=["POST"])
+def update_state():
+    try:
+        data = request.get_json()
+        if not data or "name" not in data or "current_state" not in data:
+            return jsonify({"error": "Invalid data"}), 400
+
+        name = data["name"]
+        current_state = data["current_state"]
+        timestamp = data.get("timestamp", datetime.utcnow().isoformat() + "Z")
+
+        if name not in etchbots:
+            etchbots[name] = EtchBot(name)
+
+        etchbot = etchbots[name]
+
+        # Check if the current state is valid and trigger the corresponding transition
+        if hasattr(etchbot, current_state.lower()):
+            getattr(etchbot, current_state.lower())()
+
+        print(f"EtchBot {name} state updated to {current_state} at {timestamp}")
+        return (
+            jsonify(
+                {"message": f"State updated to {current_state}", "timestamp": timestamp}
+            ),
+            200,
+        )
+
+    except Exception as e:
+        print(f"Error updating state: {e}")
+        return jsonify({"error": "Failed to update state"}), 500
 
 
 if __name__ == "__main__":
