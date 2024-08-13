@@ -1,7 +1,8 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from transitions import MachineError
 from pathlib import Path
-import datetime
+from datetime import datetime
 import threading
 import time
 import shutil
@@ -104,38 +105,84 @@ def process_files():
 # This API is used to communicate with the EtchBots
 
 
+@app.route("/command", methods=["GET"])
+def get_command():
+    """Get the command that an etchbot should execute.
+
+    Expects a GET request a JSON object with the following fields:
+    - name: The name of the EtchBot
+
+    Returns:
+    - 200: If the command was successfully retrieved
+    - 204: If there are no commands to execute
+    - 500: If an error occurred while retrieving the command
+    """
+
+    try:
+        # Check if the request contains the required fields
+        name = request.args.get("name")
+        if not name:
+            return jsonify({"error": "No name provided"}), 400
+
+        # Check if the EtchBot instance already exists
+        if name not in etchbots:
+            etchbots[name] = EtchBot(name)
+
+        # Get the EtchBot instance from the dictionary
+        etchbot = etchbots[name]
+
+        # Get the command to be executed by the EtchBot
+        command = etchbot.get_command()
+
+        # Send command if it exists
+        if command:
+            print(f"EtchBot {name} command retrieved: {command}")
+            return jsonify({"command": command}), 200
+
+        # Return 204 if no command to execute
+        return jsonify({"message": "No command to execute"}), 204
+
+    except Exception as e:
+        print(f"Error during command retrieval: {e}")
+        return jsonify({"error": "Failed to retrieve command"}), 500
+
+
 @app.route("/update_state", methods=["POST"])
 def update_state():
     """API endpoint to update the state of an EtchBot.
 
     The request should contain a JSON object with the following fields:
     - name: The name of the EtchBot
-    - current_state: The state to transition to
+    - transition: The state to transition to
     - timestamp: The timestamp of the state update
 
     Example request:
     {
         "name": "EtchBot1",
-        "current_state": "Idle",
+        "transition": "connect",
         "timestamp": "2021-08-15T12:00:00Z"
     }
 
     """
-
     try:
         data = request.get_json()
+
         # Check if the request contains the required fields
-        if (
-            not data
-            or "name" not in data
-            or "current_state" not in data
-            or "timestamp" not in data
-        ):
-            return jsonify({"error": "Invalid data"}), 400
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        if "name" not in data:
+            return jsonify({"error": "No name provided"}), 400
+
+        if "transition" not in data:
+            return jsonify({"error": "No transition provided"}), 400
+
+        if "timestamp" not in data:
+            return jsonify({"error": "No timestamp provided"}), 400
 
         name = data["name"]
-        current_state = data["current_state"]
-        timestamp = data.get("timestamp", datetime.utcnow().isoformat() + "Z")
+        transition = data["transition"]
+        timestamp = data["timestamp"]
 
         # Check if the EtchBot instance already exists, if not create a new one
         if name not in etchbots:
@@ -145,10 +192,24 @@ def update_state():
         etchbot = etchbots[name]
 
         # Check if the current state is valid and trigger the corresponding transition
-        if hasattr(etchbot, current_state.lower()):
-            getattr(etchbot, current_state.lower())()
+        if hasattr(etchbot, transition.lower()):
+            try:
+                # Trigger the transition
+                getattr(etchbot, transition.lower())()
+            except MachineError as e:
+                return jsonify({"error": str(e)}), 400
+        else:
+            # Return an error if the state is invalid
+            return (
+                jsonify({"error": f"Received invalid state: {transition.lower()}"}),
+                400,
+            )
 
-        print(f"EtchBot {name} state updated to {current_state} at {timestamp}")
+        current_state = etchbot.state
+        print(
+            f"EtchBot {name} transition {transition}. Executed. State updated to {current_state} at {timestamp}"
+        )
+
         return (
             jsonify(
                 {"message": f"State updated to {current_state}", "timestamp": timestamp}
@@ -157,8 +218,8 @@ def update_state():
         )
 
     except Exception as e:
-        print(f"Error updating state: {e}")
-        return jsonify({"error": "Failed to update state"}), 500
+        print(f"Error during state update: {e}")
+        return jsonify({f"error": "Unknown error during update - {e}"}), 500
 
 
 if __name__ == "__main__":

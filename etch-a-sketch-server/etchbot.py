@@ -27,7 +27,7 @@ class EtchBot:
                 "ERASING_COMPLETE",
                 "ERROR",
             ],
-            initial="READY",
+            initial="DISCONNECTED",
             transitions=[
                 {"trigger": "connect", "source": "DISCONNECTED", "dest": "READY"},
                 {"trigger": "draw", "source": "READY", "dest": "DRAWING"},
@@ -39,6 +39,8 @@ class EtchBot:
                 {"trigger": "recover", "source": "ERROR", "dest": "READY"},
             ],
         )
+
+        # Register the state machine callbacks
 
     def __str__(self) -> str:
         return f"EtchBot({self.name})"
