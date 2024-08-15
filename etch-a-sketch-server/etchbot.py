@@ -29,14 +29,27 @@ class EtchBot:
             ],
             initial="DISCONNECTED",
             transitions=[
-                {"trigger": "connect", "source": "DISCONNECTED", "dest": "READY"},
-                {"trigger": "draw", "source": "READY", "dest": "DRAWING"},
+                {
+                    "trigger": "connect",
+                    "source": "DISCONNECTED",
+                    "dest": "READY",
+                },
+                {"trigger": "start_command", "source": "READY", "dest": "DRAWING"},
                 {"trigger": "stop", "source": "DRAWING", "dest": "DRAWING_COMPLETE"},
-                {"trigger": "erase", "source": "DRAWING_COMPLETE", "dest": "ERASING"},
+                {
+                    "trigger": "start_command",
+                    "source": "DRAWING_COMPLETE",
+                    "dest": "ERASING",
+                },
                 {"trigger": "stop", "source": "ERASING", "dest": "ERASING_COMPLETE"},
                 {"trigger": "reboot", "source": "*", "dest": "DISCONNECTED"},
                 {"trigger": "error", "source": "*", "dest": "ERROR"},
                 {"trigger": "recover", "source": "ERROR", "dest": "READY"},
+                {
+                    "trigger": "start_command",
+                    "source": ["DRAWING", "ERASING"],
+                    "dest": "ERROR",
+                },
             ],
         )
 
@@ -47,6 +60,40 @@ class EtchBot:
 
     def __repr__(self) -> str:
         return f"EtchBot({self.name})"
+
+    def get_command(self):
+        # Robot is ready to draw
+        # If this is the first time robot has requested a command, switch state to READY
+        if self.state == "DISCONNECTED":
+            self.connect()
+
+        # Try to get a command based on the current state
+        try:
+            self.start_command()
+
+            if self.state != "ERROR":
+                return self.command()
+
+            else:
+                # Print an error message if the robot is in an error state
+                print(
+                    f"{self.name} is in an error state as it fell out of sync with the state machine."
+                )
+
+                return None
+
+        except transitions.MachineError:
+            # If the condition is not met or the state machine is in an invalid state, return None
+            return None
+
+    def is_paused(self):
+        return self.paused
+
+    def pause(self):
+        self.paused = True
+
+    def resume(self):
+        self.paused = False
 
     # State machine methods
     def on_enter_DISCONNECTED(self):

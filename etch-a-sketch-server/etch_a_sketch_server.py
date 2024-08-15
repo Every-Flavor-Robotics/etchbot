@@ -147,6 +147,69 @@ def get_command():
         return jsonify({"error": "Failed to retrieve command"}), 500
 
 
+@app.route("/drawing_complete", methods=["POST"])
+def drawing_complete():
+    """API endpoint to notify the server that an EtchBot has completed drawing.
+
+    The request should contain a JSON object with the following fields:
+    - name: The name of the EtchBot
+    - drawing_time: The time taken to complete the drawing in seconds
+    """
+    try:
+        # Get the data from the request
+        data = request.get_json()
+
+        # Check if the request contains the required fields
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        if "name" not in data:
+            return jsonify({"error": "No name provided"}), 400
+
+        if "drawing_time" not in data:
+            return jsonify({"error": "No drawing time provided"}), 400
+
+        name = data["name"]
+        drawing_time = data["drawing_time"]
+
+        # Check if the EtchBot instance already exists, return an error if it doesn't
+        if name not in etchbots:
+            return (
+                jsonify(
+                    {"error": f"EtchBot {name} not found. Please call GET task first"}
+                ),
+                404,
+            )
+
+        # Get the EtchBot instance from the dictionary
+        etchbot = etchbots[name]
+
+        # Notify the EtchBot that drawing is complete
+        etchbot.drawing_complete(drawing_time)
+
+        print(f"EtchBot {name} drawing completion notified.")
+
+    except Exception as e:
+        print(f"Error during drawing completion: {e}")
+        return jsonify({"error": f"Unknown error {e}"}), 500
+
+
+@app.route("/erasing_complete", methods=["POST"])
+def erasing_complete():
+    """API endpoint to notify the server that an EtchBot has completed erasing.
+
+    The request should contain a JSON object with the following fields:
+    - name: The name of the EtchBot
+    - timestamp: The timestamp of the erasing completion
+    """
+    pass
+
+
+@app.route("/error", methods=["POST"])
+def error():
+    pass
+
+
 @app.route("/update_state", methods=["POST"])
 def update_state():
     """API endpoint to update the state of an EtchBot.
