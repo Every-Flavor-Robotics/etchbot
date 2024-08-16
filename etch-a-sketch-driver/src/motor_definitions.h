@@ -14,20 +14,20 @@ const MotorGo::MotorConfiguration GARTTLeftTronix(11,        // pole_pairs
                                                   338.85,    // kv
                                                   0.1088f,   // phase_resistance
                                                   NOT_SET,   // phase_inductance
-                                                  3.5,       // voltage_limit
-                                                  5.5f,      // current_limit
+                                                  4.5,       // voltage_limit
+                                                  6.0f,      // current_limit
                                                   10000.0f,  // velocity_limit
-                                                  1.0f  // calibration_voltage
+                                                  1.1f  // calibration_voltage
 );
 
 const MotorGo::MotorConfiguration GARTTRightTronix(11,       // pole_pairs
                                                    374.59,   // kv
                                                    0.1088f,  // phase_resistance
                                                    NOT_SET,  // phase_inductance
-                                                   3.5,      // voltage_limit
-                                                   5.5f,     // current_limit
+                                                   4.5,      // voltage_limit
+                                                   6.0f,     // current_limit
                                                    10000.0f,  // velocity_limit
-                                                   1.0f  // calibration_voltage
+                                                   1.1f  // calibration_voltage
 );
 
 // PID PARAMETERS

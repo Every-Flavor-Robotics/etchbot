@@ -35,16 +35,16 @@ typedef union
 
 //  Conversion from mm to radians
 // #define GEAR_RATIO 30.0 / 66.0  // Motor to knob
-#define GEAR_RATIO (1 / 2.66666666667)  // Motor to knob
-#define RAD_PER_MM (0.1858 / GEAR_RATIO)
+#define GEAR_RATIO (18.0f / 81.0f)  // Motor to knob
+#define RAD_PER_MM (0.1858f / GEAR_RATIO)
 #define MMPERMIN_TO_RADPERSEC (RAD_PER_MM / 60.0)
 #define ACCELERATION 16000
 #define MAX_ACCELERATION 25000
-#define UP_DOWN_BACKLASH_RAD (1.35 * RAD_PER_MM)
+#define UP_DOWN_BACKLASH_RAD (1.5 * RAD_PER_MM)
 #define LEFT_RIGHT_BACKLASH_RAD (1.8 * RAD_PER_MM)
-#define BACKLASH_COMEPSENATION_RADPERSEC 10.0
+#define BACKLASH_COMEPSENATION_RADPERSEC 2.0
 // mm * RAD_PER_MM = rad
-#define ERROR_TOLERANCE (0.8 * RAD_PER_MM)
+#define ERROR_TOLERANCE (0.2 * RAD_PER_MM)
 #define OL_THRESHOLD (0.2f * RAD_PER_MM)
 
 #define ENABLED
@@ -63,8 +63,8 @@ TaskHandle_t loop_foc_task;
 TickType_t xLastWakeTime;
 void loop_foc(void* pvParameters);
 MotorGo::MotorGoMini motorgo_mini;
-MotorGo::MotorChannel& left_right = motorgo_mini.ch1;
-MotorGo::MotorChannel& up_down = motorgo_mini.ch0;
+MotorGo::MotorChannel& left_right = motorgo_mini.ch0;
+MotorGo::MotorChannel& up_down = motorgo_mini.ch1;
 
 MotorGo::ChannelConfiguration config_ch0;
 MotorGo::ChannelConfiguration config_ch1;
@@ -185,10 +185,10 @@ void setup()
   pinMode(0, INPUT_PULLUP);
 
   Serial.begin(5000000);
-  while (!Serial)
-  {
-    delay(50);
-  }
+  //   while (!Serial)
+  //   {
+  //     delay(50);
+  //   }
 
   // Setup motor parameters
   config_ch0.motor_config = GARTTLeftTronix;
@@ -288,13 +288,13 @@ void setup()
   left_right.set_control_mode(MotorGo::ControlMode::Voltage);
   up_down.set_control_mode(MotorGo::ControlMode::Voltage);
 
-  pid_manager.init("NotARobot", "M1crowave!");
+  pid_manager.init("CenturyLink1343", "3wx9qs9jn2pw5n");
 
   // Start the WebSocket server
   //   webSocket.begin();
   //   webSocket.onEvent(webSocketEvent);
 
-  stream = new GCode::WifiGCodeStream("192.168.10.15", 50);
+  stream = new GCode::WifiGCodeStream("192.168.0.102", 50);
   parser = new GCode::GCodeParser(stream, 2000);
 
   GCode::start_parser(*parser);
@@ -544,8 +544,17 @@ void loop()
 
     // Serial.println("position y: " + String(up_down.get_position()) + "\t" +
     //                up_down_backlash_offset);
+
     profile.x_initial = left_right.get_position();
     profile.y_initial = up_down.get_position();
+
+    // Construct a string, print left right position and backlash offset
+    // String test = "position: " +
+    //               String(profile.x_initial + left_right_backlash_offset, 5) +
+    //               "\t" + String(left_right_backlash_offset, 5);
+
+    // freq_println(test, 4);
+
     profile.previous_left_right_direction = left_right_previous_direction;
     profile.previous_up_down_direction = up_down_previous_direction;
     profile.backlash_compensation = true;
