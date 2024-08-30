@@ -15,8 +15,8 @@ class GCodeFilter(Preprocessor):
     next step in the pipeline.
     """
 
-    SUPPORTED_TYPES = [".gcode"]
-    OUTPUT_EXTENSION = ".gcode"
+    SUPPORTED_TYPES = [".gcode", ".optgcode"]
+    OUTPUT_EXTENSION = ".optgcode"
 
     def decode_line(self, line: str) -> tuple[str, dict]:
         """Decode a line from the GCode file.

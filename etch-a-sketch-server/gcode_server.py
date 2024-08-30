@@ -4,36 +4,37 @@ import time
 import click
 import threading
 import socket
-from flask import Flask, Blueprint, jsonify
+from flask import Flask, Blueprint, jsonify, request
 import re
 from filelock import FileLock, Timeout
 from click import secho
+from etch_a_sketch_cli import run_pipeline
+from pathlib import Path
+import shutil
+from etchbot import EtchBotStore
 
 
-gcode_buffer = []
-buffer_lock = threading.Lock()
+etchbot_store = EtchBotStore()
 
-status_UNKNOWN = "UNKNOWN"
-status_READY = "READY"
-status_DRAWING = "DRAWING"
-status_ERROR = "ERROR"
-cur_status = status_UNKNOWN
+SUPPORTED_IMAGE_TYPES = [".jpg", ".jpeg", ".png", ".svg"]
+SUPPORTED_VIDEO_TYPES = [".mp4", ".avi", ".mov"]
+SUPPORTED_GCODE_TYPES = [".gcode"]
+# optgcode bypasses all processing and is directly sent to the GCode server
+SUPPORTED_OPTIMIZED_GCODE_TYPES = [".optgcode"]
+SUPPORTED_FILE_TYPES = (
+    SUPPORTED_IMAGE_TYPES
+    + SUPPORTED_VIDEO_TYPES
+    + SUPPORTED_GCODE_TYPES
+    + SUPPORTED_OPTIMIZED_GCODE_TYPES
+)
+
+UPLOAD_DIR = Path("uploads")
+PROCESSING_DIR = Path("processing")
 
 
-def write_robot_status(status):
-    global cur_status
-    if status == cur_status:
-        return
-
-    cur_status = status
-    while True:
-        try:
-            with FileLock("robot_status.txt.lock"):
-                with open("robot_status.txt", "w") as f:
-                    f.write(status)
-        except Timeout:
-            print("Failed to acquire lock on robot_status.txt")
-        break
+def extract_number(filename: str):
+    match = re.search(r"\d+", filename)
+    return int(match.group()) if match else float("inf")
 
 
 class GCode:
@@ -43,16 +44,31 @@ class GCode:
 
         if lines is not None:
             self.gcode_lines = lines
+            self.loaded = True
         else:
+            # Confirm that the file exists
+            if not self.gcode_file.exists():
+                raise FileNotFoundError(f"File {self.gcode_file} not found.")
+
+            self.loaded = False
+
             self.gcode_lines = []
-            with open(gcode_file) as f:
-                self.gcode_lines = f.readlines()
-                self.gcode_lines.append("G28\n")
-                self.gcode_lines.append("END\n")
 
         self.line_number = 0
 
+    def load(self):
+        with open(gcode_file) as f:
+            self.gcode_lines = f.readlines()
+            self.gcode_lines.append("G28\n")
+            self.gcode_lines.append("END\n")
+
+        print(f"Read in {len(self.gcode_lines)} lines from {gcode_file}.")
+        self.loaded = True
+
     def get_gcode(self, num_lines):
+        if self.loaded == False:
+            self.load()
+
         gcode_block = "".join(
             self.gcode_lines[self.line_number : self.line_number + num_lines]
         )
@@ -60,6 +76,9 @@ class GCode:
         return gcode_block
 
     def complete(self):
+        if not self.loaded:
+            return False
+
         return self.line_number >= len(self.gcode_lines)
 
     def delete_file(self):
@@ -71,28 +90,147 @@ class GCode:
     def reset(self):
         self.line_number = 0
 
+    def get_name(self):
+        return self.gcode_file.stem
+
 
 class EmptyGCode(GCode):
     def __init__(self):
         super().__init__(None, ["END\n"])
 
 
+class Drawing:
+    ARTIFACTS_DIR = Path("artifacts")
+
+    def __init__(self, name: str, path: pathlib.Path):
+        self.name = name
+
+        self.path = path
+
+        # Confirm that the file exists
+        if not self.path.exists():
+            raise FileNotFoundError(f"File {self.path} not found.")
+
+        # Check if the file is a supported type
+        file_extension = self.path.suffix.lower()
+        if file_extension not in SUPPORTED_FILE_TYPES:
+            raise ValueError(f"File type {file_extension} not supported.")
+
+        self.ready = False
+
+        # List of GCodes related to this drawing
+        self.gcodes = []
+
+        self.artifact_dir = None
+
+    def start_processing(self):
+        # Start processing the files in the directory in a separate thread
+        threading.Thread(target=self._process_helper).start()
+
+    def _process_helper(self):
+        # Process the files in the directory
+        try:
+            print("Processing file:", self.path)
+
+            output = None
+            file_extension = self.path.suffix.lower()
+            if file_extension in SUPPORTED_FILE_TYPES:
+                processing_dir = PROCESSING_DIR / self.path.stem
+                output = run_pipeline(self.path, processing_dir, copy=False)
+
+        # Do nothing if file type is not supported
+        except Exception as e:
+            print(f"Error during file processing: {e}")
+
+        self._add_gcode_to_queue(output)
+
+        # Create an artifact directory for the drawing
+        self.artifact_dir = processing_dir / self.ARTIFACTS_DIR
+        self.artifact_dir.mkdir(exist_ok=True)
+
+        self.ready = True
+
+    def get_artifiact_dir(self):
+        return self.artifact_dir
+
+    def _add_gcode_to_queue(self, output: pathlib.Path):
+        if output is None:
+            return
+
+        # Check if output is a directory
+        if output.is_dir():
+            # Add the GCode files in the directory to the queue in order
+            gcode_files = sorted(
+                output.glob("*.optgcode"), key=lambda x: extract_number(x.stem)
+            )
+
+            self.gcodes.extend(
+                [GCode(gcode_file, parent_dir=output) for gcode_file in gcode_files]
+            )
+
+        # Check if output is a file
+        elif output.is_file():
+            # Add the GCode file to the queue
+            self.gcodes.append(GCode(output))
+
+        # Do nothing if output is neither a file nor a directory
+        print("GCodes added to queue:", len(self.gcodes))
+
+    def status(self):
+        # Return whether or not drawing is ready, and the number of GCodes in the queue
+        return self.ready, len(self.gcodes)
+
+    def next(self):
+        if len(self.gcodes) == 0:
+            return None
+
+        return self.gcodes[0]
+
+    def pop(self):
+        if len(self.gcodes) == 0:
+            return None
+
+        return self.gcodes.pop(0)
+
+    def get_zipped_artifact(self) -> pathlib.Path:
+        # Zip the artifact directory
+        artifact_zip = self.artifact_dir
+        archive_path = shutil.make_archive(artifact_zip, "zip", self.artifact_dir)
+
+        return Path(archive_path)
+
+    def __len__(self):
+        return len(self.gcodes)
+
+    def name(self):
+        return self.name
+
+    @staticmethod
+    def is_supported_file_type(file_path: [pathlib.Path, str]):
+        if isinstance(file_path, str):
+            file_path = pathlib.Path(file_path)
+        return file_path.suffix.lower() in SUPPORTED_FILE_TYPES
+
+
 class GCodeRequestHandler(socketserver.StreamRequestHandler):
     start_line = 0
 
     def handle(self):
-        global gcode_buffer, buffer_lock, status_READY, status_DRAWING, status_ERROR
+        global etchbot_store
 
         print("Connected by", self.client_address)
 
-        write_robot_status(status_DRAWING)
+        etchbot = etchbot_store.get_robot_by_ip(self.client_address[0])
+        if etchbot is None:
+            print("Etchbot not found. Closing connection.")
+            self.request.close()
+            return
 
-        with buffer_lock:
-            if len(gcode_buffer) == 0:
-                print("No GCode in buffer. Sending empty GCode.")
-                gcode = EmptyGCode()
-            else:
-                gcode = gcode_buffer.pop(0)
+        gcode = etchbot.next_gcode()
+        if gcode is None:
+            print("No GCode found. Sending empty GCode.")
+            # Return an empty GCode file
+            gcode = EmptyGCode()
 
         try:
             while not gcode.complete():
@@ -112,18 +250,13 @@ class GCodeRequestHandler(socketserver.StreamRequestHandler):
                     self.request.sendall(gcode_block.encode())
 
                     print("Response sent")
-            gcode.delete_file()
+
         except socket.timeout:
-            print("Connection timed out. Will retry this gcode next time")
+            print("Connection timed out. Will retry this gcode next timee")
             gcode.reset()
-            with buffer_lock:
-                gcode_buffer.insert(0, gcode)
-            write_robot_status(status_ERROR)
         except (ConnectionResetError, BrokenPipeError):
             print("Connection closed by client. Will retry this gcode next time")
             gcode.reset()
-            with buffer_lock:
-                gcode_buffer.insert(0, gcode)
         print("G-code transmission ended. Closing connection.")
         self.request.close()
 
@@ -151,24 +284,31 @@ def get_new_gcode(scan_directory: pathlib.Path):
         time.sleep(2)
 
 
-def extract_number(filename: str):
-    match = re.search(r"\d+", filename)
-    return int(match.group()) if match else float("inf")
-
-
 gcode_blueprint = Blueprint("gcode_blueprint", __name__)
 
 
 @gcode_blueprint.route("/gcode/available")
 def gcode_available():
-    global gcode_buffer, buffer_lock
-    with buffer_lock:
-        if len(gcode_buffer) > 0:
-            return "", 200
+    global etchbot_store
+    try:
+        # Check if the etchbot name is in the request
+        etchbot_name = request.args.get("name")
+        if etchbot_name is None:
+            return "Error: Etchbot name not provided", 400
+
+        etchbot = EtchBotStore().get_robot_by_name(etchbot_name)
+        if etchbot is None:
+            return f"Error: Etchbot {etchbot_name} not found", 404
+
+        if etchbot.gcode_ready():
+            return jsonify({"available": True}), 200
+
         else:
             print("Returning 204")
-            write_robot_status(status_READY)
-            return "", 204
+            return jsonify({"available": False}), 204
+    except Exception as e:
+        print(e)
+        return f"Error: {e}", 500
 
 
 def start_gcode_server(host="0.0.0.0", port=5005):

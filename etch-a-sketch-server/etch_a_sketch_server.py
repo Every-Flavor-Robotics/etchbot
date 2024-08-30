@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from transitions import MachineError
 from pathlib import Path
@@ -10,26 +10,17 @@ from etch_a_sketch_cli import run_pipeline
 from gcode_server import (
     gcode_blueprint,
     run_gcode_server,
+    Drawing,
 )
-from etchbot import EtchBot
+from etchbot import EtchBot, EtchBotStore
+from http_camera import HTTPCamera
 
 UPLOAD_DIR = Path("uploads")
 PROCESSING_DIR = Path("processing")
 OUTPUT_DIR = Path("gcode_outputs")
-SUPPORTED_IMAGE_TYPES = [".jpg", ".jpeg", ".png", ".svg"]
-SUPPORTED_VIDEO_TYPES = [".mp4", ".avi", ".mov"]
-SUPPORTED_GCODE_TYPES = [".gcode"]
-# optgcode bypasses all processing and is directly sent to the GCode server
-SUPPORTED_OPTIMIZED_GCODE_TYPES = [".optgcode"]
-SUPPORTED_FILE_TYPES = (
-    SUPPORTED_IMAGE_TYPES
-    + SUPPORTED_VIDEO_TYPES
-    + SUPPORTED_GCODE_TYPES
-    + SUPPORTED_OPTIMIZED_GCODE_TYPES
-)
 
 # Dictionary to store EtchBot instances
-etchbots = {}
+etchbot_store = EtchBotStore()
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -39,70 +30,282 @@ app.register_blueprint(gcode_blueprint)
 
 
 ###### User facing API ######
-@app.route("/upload", methods=["POST"])
-def upload_file():
+@app.route("/upload/<etchbot_name>", methods=["POST"])
+def upload_file(etchbot_name):
+    print(f"Receiving file for EtchBot {etchbot_name}...")
     try:
-        print("Receiving file...")
+        print(f"Receiving file for EtchBot {etchbot_name}...")
         file = request.files["file"]
         if not file:
             return jsonify({"error": "No file provided"}), 400
 
-        file_extension = Path(file.filename).suffix.lower()
-
-        if file_extension not in SUPPORTED_FILE_TYPES:
+        # Check if the file type is supported
+        # Do not save the file if it is not supported
+        if not Drawing.is_supported_file_type(file.filename):
             return jsonify({"error": "Unsupported file type"}), 400
 
-        save_path = UPLOAD_DIR / f"{time.strftime('%m%d%H%M%S')}{file_extension}"
+        # Confirm that that the Etchbot exists
+        if etchbot_name not in etchbot_store:
+            return jsonify({"error": f"EtchBot {etchbot_name} not found"}), 404
+
+        etchbot = etchbot_store.get_robot_by_name(etchbot_name)
+
+        # Add the time
+        save_path = (
+            UPLOAD_DIR / etchbot_name / f"{time.strftime('%m%d%H%M%S')}_{file.filename}"
+        )
         file.save(save_path)
 
-        return jsonify({"message": "File processing started."}), 200
+        file_name = file.filename.split(".")[0]
+        # Create a drawing and hand off to the Etchbot
+        drawing = Drawing(file_name, save_path)
+        etchbot.add_drawing(drawing)
+
+        # Start file processing or any other logic related to the specific etchbot
+        return (
+            jsonify(
+                {"message": f"File processing started for EtchBot {etchbot_name}."}
+            ),
+            200,
+        )
     except Exception as e:
-        print(f"Error during file upload: {e}")
+        print(f"Error during file upload for {etchbot_name}: {e}")
         return jsonify({"error": "Failed to process file"}), 500
 
 
-def process_files():
-    """Function that constantly checks UPLOAD DIR for new files and processes them.
+# Get all connected EtchBots
+@app.route("/etchbots", methods=["GET"])
+def get_etchbots():
+    names = etchbot_store.get_all_names()
+    # Convert the set to a list and return it as a JSON response
+    return jsonify({"etchbots": list(names)}), 200
 
-    Supported file types:
-    - Images: .jpg, .jpeg, .png, .svg
-    - Videos: .mp4, .avi, .mov
-    - GCode: .gcode
-    - Optimized GCode: .optgcode <- bypasses all processing and is directly sent to the GCode server
 
-    """
-    print("Processing thread started.")
-    while True:
-        for file_path in UPLOAD_DIR.iterdir():
-            try:
-                print("Processing file:", file_path)
-                file_extension = file_path.suffix.lower()
-                if file_extension in SUPPORTED_OPTIMIZED_GCODE_TYPES:
-                    # For optimized GCode files, just move them to the output directory
-                    # Change the file extension to .gcode
-                    output_path = OUTPUT_DIR / f"{file_path.stem}.gcode"
-                    shutil.move(str(file_path), output_path)
+# Get the state of a specific EtchBot
+@app.route("/etchbot/state", methods=["GET"])
+def get_etchbot_state():
+    try:
+        name = request.args.get("name")  # Get the name from query parameters
+        if not name:
+            return jsonify({"error": "No name provided"}), 400
 
-                # If it's any other supported file type, process it
-                elif file_extension in SUPPORTED_FILE_TYPES:
-                    processing_dir = PROCESSING_DIR / file_path.stem
-                    run_pipeline(file_path, processing_dir, copy=False)
+        if name not in etchbot_store:
+            return jsonify({"error": f"EtchBot {name} not found"}), 404
 
-                    # Copy gcode to output directory, named input file name.gcode
-                    # TODO: Update to support directories too
-                    gcode_path = processing_dir / "output.gcode"
-                    output_path = OUTPUT_DIR / f"{file_path.stem}.gcode"
-                    shutil.copy(gcode_path, output_path)
-                    file_path.unlink()
-                # Do nothing if file type is not supported
-            except Exception as e:
-                print(f"Error during file processing: {e}")
+        etchbot = etchbot_store.get_robot_by_name(name)
 
-        time.sleep(1)
+        return jsonify({"state": etchbot.state}), 200
+
+    except Exception as e:
+        print(f"Error during state retrieval: {e}")
+        return jsonify({"error": "Failed to retrieve state"}), 500
+
+
+@app.route("/etchbot/<etchbot_name>/status", methods=["GET"])
+def get_etchbot_status(etchbot_name):
+    # Return a JSON object containing the status of the EtchBot
+    # Current state
+    # Current drawing
+    # Is camera connected
+    # Is camera recording
+
+    try:
+        if etchbot_name not in etchbot_store:
+            return jsonify({"error": f"EtchBot {etchbot_name} not found"}), 404
+
+        etchbot = etchbot_store.get_robot_by_name(etchbot_name)
+
+        drawing = etchbot.next_drawing()
+        if drawing:
+            drawing = drawing.name
+
+        else:
+            drawing = None
+
+        status = {
+            "state": etchbot.state,
+            "current_drawing": drawing,
+            "camera_connected": etchbot.camera is not None,
+            "camera_recording": (
+                etchbot.camera.is_recording if etchbot.camera else False
+            ),
+        }
+
+        return jsonify(status), 200
+
+    except Exception as e:
+        print(f"Error during status retrieval: {e}")
+        return jsonify({"error": "Failed to retrieve status"}), 500
+
+
+@app.route("/etchbot/queue", methods=["GET"])
+def get_etchbot_queue():
+    try:
+        name = request.args.get("name")  # Get the name from query parameters
+        if not name:
+            return jsonify({"error": "No name provided"}), 400
+
+        if name not in etchbot_store:
+            return jsonify({"error": f"EtchBot {name} not found"}), 404
+
+        etchbot = etchbot_store.get_robot_by_name(name)
+
+        return jsonify({"queue": etchbot.get_queue_information()}), 200
+
+    except Exception as e:
+        print(f"Error during queue retrieval: {e}")
+        return jsonify({"error": "Failed to retrieve queue"}), 500
+
+
+@app.route("/etchbot/completed", methods=["GET"])
+def get_etchbot_completed():
+    try:
+        name = request.args.get("name")  # Get the name from query parameters
+        if not name:
+            return jsonify({"error": "No name provided"}), 400
+
+        if name not in etchbot_store:
+            return jsonify({"error": f"EtchBot {name} not found"}), 404
+
+        etchbot = etchbot_store.get_robot_by_name(name)
+
+        return jsonify({"completed": etchbot.get_completed_information()}), 200
+
+    except Exception as e:
+        print(f"Error during completed drawings retrieval: {e}")
+        return jsonify({"error": "Failed to retrieve completed drawings"}), 500
+
+
+@app.route("/etchbot/<etchbot_name>/download_zip", methods=["POST"])
+def download_artifact(etchbot_name):
+    try:
+        print(f"Downloading artifact for EtchBot {etchbot_name}...")
+        data = request.get_json()
+        print(data)
+
+        drawing_index = data.get("drawing_index")
+        if drawing_index is None:
+            return jsonify({"error": "No index provided"}), 400
+
+        if etchbot_name not in etchbot_store:
+            return jsonify({"error": f"EtchBot {etchbot_name} not found"}), 404
+
+        etchbot = etchbot_store.get_robot_by_name(etchbot_name)
+
+        artifact_path = etchbot.get_completed_zip(drawing_index)
+        # Get name of the artifact
+        artifact_name = etchbot.get_completed_information()[drawing_index]["name"]
+        if not artifact_path or not artifact_path.exists():
+            return (
+                jsonify({"error": f"Artifact at index {drawing_index} not found"}),
+                404,
+            )
+
+        # Send the file to the client for download
+        return send_file(
+            artifact_path, as_attachment=True, download_name=f"{artifact_name}.zip"
+        )
+
+    except Exception as e:
+        print(f"Error downloading artifact: {e}")
+        return jsonify({"error": "Failed to download artifact"}), 500
+
+
+@app.route("/etchbot/<etchbot_name>/connect_camera", methods=["POST"])
+def connect_camera(etchbot_name):
+    try:
+        data = request.get_json()
+        service_url = data.get("service_url")
+        camera_index = data.get("camera_index")
+
+        if not service_url:
+            return jsonify({"error": "No service URL provided"}), 400
+
+        if camera_index is None:
+            return jsonify({"error": "No camera index provided"}), 400
+
+        try:
+            camera = HTTPCamera(service_url, camera_index)
+        except Exception as e:
+            return jsonify({"error": f"Failed to connect to camera service: {e}"}), 500
+
+        if etchbot_name not in etchbot_store:
+            return jsonify({"error": f"EtchBot {etchbot_name} not found"}), 404
+
+        etchbot = etchbot_store.get_robot_by_name(etchbot_name)
+        etchbot.set_camera(camera)
+
+        return (
+            jsonify({"message": f"Connected to camera service at {service_url}"}),
+            200,
+        )
+    except Exception as e:
+        print(f"Error connecting to camera service: {e}")
+        return jsonify({"error": f"Failed to connect to camera service: {e}"}), 500
 
 
 ### EtchBot API ###
 # This API is used to communicate with the EtchBots
+
+
+@app.route("/connect", methods=["POST"])
+def connect():
+    """API endpoint to connect an EtchBot.
+
+    Expects a POST request with a JSON object containing the following fields:
+    - name: The name of the EtchBot
+    - ip: The IP address of the EtchBot
+
+    Returns:
+    - 200: If the EtchBot was successfully connected
+    - 400: If the request is missing required fields
+    - 500: If an error occurred while connecting the EtchBot
+    """
+    try:
+        # Get the data from the request
+        data = request.get_json()
+
+        # Check if the request contains the required fields
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        if "name" not in data:
+            return jsonify({"error": "No name provided"}), 400
+
+        if "ip" not in data:
+
+            return jsonify({"error": "No IP address provided"}), 400
+
+        name = data["name"]
+        ip = data["ip"]
+
+        # Check if the EtchBot instance already exists, if not create a new one
+        etchbot = None
+        if name not in etchbot_store:
+            etchbot = EtchBot(ip, name)
+            etchbot_store.add_robot(etchbot)
+
+        else:
+            # Confirm that the IP address matches the existing EtchBot
+            etchbot = etchbot_store.get_robot_by_name(name)
+            etchbot.update_ip(ip)
+
+        # Connect the EtchBot
+        try:
+            etchbot.connect()
+
+        except MachineError as e:
+            return jsonify({"error": str(e)}), 500
+
+        # Create a directory in UPLOAD_DIR for the EtchBot
+        etchbot_dir = UPLOAD_DIR / name
+        etchbot_dir.mkdir(exist_ok=True)
+
+    except Exception as e:
+        print(f"Error during connection: {e}")
+        return jsonify({"error": f"Unknown error {e}"}), 500
+
+    return jsonify({"message": "EtchBot connected"}), 200
 
 
 @app.route("/command", methods=["GET"])
@@ -110,7 +313,7 @@ def get_command():
     """Get the command that an etchbot should execute.
 
     Expects a GET request a JSON object with the following fields:
-    - name: The name of the EtchBot
+    - name: The ip of the EtchBot
 
     Returns:
     - 200: If the command was successfully retrieved
@@ -120,16 +323,24 @@ def get_command():
 
     try:
         # Check if the request contains the required fields
+        # Get the name of the EtchBot, provided in the JSON body
         name = request.args.get("name")
         if not name:
             return jsonify({"error": "No name provided"}), 400
 
         # Check if the EtchBot instance already exists
-        if name not in etchbots:
-            etchbots[name] = EtchBot(name)
+        if name not in etchbot_store:
+            return (
+                jsonify(
+                    {
+                        "error": f"EtchBot {name} not found. Please call POST connect first"
+                    }
+                ),
+                404,
+            )
 
         # Get the EtchBot instance from the dictionary
-        etchbot = etchbots[name]
+        etchbot = etchbot_store.get_robot_by_name(name)
 
         # Get the command to be executed by the EtchBot
         command = etchbot.get_command()
@@ -173,7 +384,7 @@ def drawing_complete():
         drawing_time = data["drawing_time"]
 
         # Check if the EtchBot instance already exists, return an error if it doesn't
-        if name not in etchbots:
+        if name not in etchbot_store:
             return (
                 jsonify(
                     {"error": f"EtchBot {name} not found. Please call GET task first"}
@@ -182,12 +393,14 @@ def drawing_complete():
             )
 
         # Get the EtchBot instance from the dictionary
-        etchbot = etchbots[name]
+        etchbot = etchbot_store.get_robot_by_name(name)
 
         # Notify the EtchBot that drawing is complete
-        etchbot.drawing_complete(drawing_time)
+        etchbot.drawing_complete()
 
         print(f"EtchBot {name} drawing completion notified.")
+
+        return jsonify({"message": "Drawing completion notified"}), 200
 
     except Exception as e:
         print(f"Error during drawing completion: {e}")
@@ -200,9 +413,43 @@ def erasing_complete():
 
     The request should contain a JSON object with the following fields:
     - name: The name of the EtchBot
-    - timestamp: The timestamp of the erasing completion
     """
-    pass
+
+    try:
+        # Get the data from the request
+        data = request.get_json()
+
+        # Check if the request contains the required fields
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        if "name" not in data:
+            return jsonify({"error": "No name provided"}), 400
+
+        name = data["name"]
+
+        # Check if the EtchBot instance already exists, return an error if it doesn't
+        if name not in etchbot_store:
+            return (
+                jsonify(
+                    {"error": f"EtchBot {name} not found. Please call GET task first"}
+                ),
+                404,
+            )
+
+        # Get the EtchBot instance from the dictionary
+        etchbot = etchbot_store.get_robot_by_name(name)
+
+        # Notify the EtchBot that erasing is complete
+        etchbot.erasing_complete()
+
+        print(f"EtchBot {name} erasing completion notified.")
+
+        return jsonify({"message": "Erasing completion notified"}), 200
+
+    except Exception as e:
+        print(f"Error during erasing completion: {e}")
+        return jsonify({"error": f"Unknown error {e}"}), 500
 
 
 @app.route("/error", methods=["POST"])
@@ -295,10 +542,6 @@ if __name__ == "__main__":
 
     if not OUTPUT_DIR.exists():
         OUTPUT_DIR.mkdir()
-
-    # Start the processing thread
-    processing_thread = threading.Thread(target=process_files)
-    processing_thread.start()
 
     run_gcode_server(OUTPUT_DIR, run_flask=False)
 

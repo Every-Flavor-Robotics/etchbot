@@ -189,7 +189,9 @@ def run_pipeline(
         # Convert to G-code
         click.secho(f"Converting to G-code...", fg="green")
         for gcode_converter in gcode_converters:
-            input_file = gcode_converter.process(input_file, output_dir, "output")
+            input_file = gcode_converter.process(
+                input_file, output_dir, "unprocessed_gcode"
+            )
 
             copy_files(
                 input_file,
@@ -214,17 +216,11 @@ def run_pipeline(
             copy_files(
                 input_file,
                 output_dir
-                / f"step_{counter}_preprocessed_{type(gcode_filter).__name__}.gcode",
+                / f"step_{counter}_preprocessed_{type(gcode_filter).__name__}.optgcode",
             )
 
             counter += 1
 
-    # Finally, move the final gcode to final.gcode
-    copy_files(
-        input_file,
-        output_dir / f"final.gcode",
-    )
-    counter = 0
     return input_file
 
 
