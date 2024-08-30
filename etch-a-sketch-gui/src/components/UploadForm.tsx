@@ -1,8 +1,15 @@
-import React, { useState, ChangeEvent, FormEvent } from "react";
-import { Box, Button, Input, Progress, Alert, AlertIcon, AlertTitle, AlertDescription, CloseButton } from "@chakra-ui/react";
+import React, { useState, ChangeEvent, FormEvent, useEffect } from "react";
+import { Box, Button, Input, Progress, Alert, AlertIcon, AlertTitle, AlertDescription, CloseButton, Heading } from "@chakra-ui/react";
 import axios from "axios";
 
-const UploadForm: React.FC = () => {
+interface UploadFormProps {
+    etchbotName: string;
+}
+
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5010';
+
+
+const UploadForm: React.FC<UploadFormProps> = ({ etchbotName }) => {
     const [file, setFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
@@ -19,14 +26,14 @@ const UploadForm: React.FC = () => {
         if (!file) return;
 
         const formData = new FormData();
-        formData.append("file", file); // Ensure the key matches what the backend expects
+        formData.append("file", file);
 
         setLoading(true);
         setSuccess(false);
         setError(null);
 
         try {
-            const response = await axios.post("http://localhost:5010/upload", formData, {
+            const response = await axios.post(`${API_URL}/upload/${etchbotName}`, formData, {
                 headers: {
                     "Content-Type": "multipart/form-data",
                 },
@@ -41,8 +48,20 @@ const UploadForm: React.FC = () => {
         }
     };
 
+    useEffect(() => {
+        if (success || error) {
+            const timer = setTimeout(() => {
+                setSuccess(false);
+                setError(null);
+            }, 3000); // Notifications disappear after 3 seconds
+
+            return () => clearTimeout(timer);
+        }
+    }, [success, error]);
+
     return (
         <Box>
+            <Heading as="h3" size="md" mb={4}>Upload Drawing</Heading> {/* Add a heading */}
             <form onSubmit={handleSubmit}>
                 <Input type="file" onChange={handleFileChange} mb={4} />
                 <Button type="submit" colorScheme="teal" isDisabled={loading}>
