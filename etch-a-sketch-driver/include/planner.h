@@ -5,13 +5,6 @@
 namespace Planner
 {
 
-// Define a struct to hold a 2D position vector
-struct PositionVector
-{
-  float x;
-  float y;
-};
-
 struct VelocityVector
 {
   float x;
@@ -41,16 +34,41 @@ struct TrapezoidTrajectoryParameters
   float v_final;
   float v_target;
   float a_target;
+  float end_delay_us = 0;
+};
 
-  // Backlash compensation parameters
-  bool backlash_compensation = false;
-  float left_right_backlash_compensation_distance = 0;
-  float up_down_backlash_compensation_distance = 0;
-  float backlash_compensation_velocity = 0;
+struct BacklashCompensatedTrajectoryParameters
+{
+  // Trajectory parameters for the main profile
+  //   These should contain the parameters directly from the gcode command,
+  //   not the current state of the system
+  TrapezoidTrajectoryParameters main_profile;
+
+  bool backlash_compensation_enabled = false;
+
   //   Previous direction of motion in the x and y directions
   //   Forward is defined as up and right
-  Direction previous_left_right_direction = BACKWARD;
-  Direction previous_up_down_direction = BACKWARD;
+  Direction left_right_direction_previous = BACKWARD;
+  Direction up_down_direction_previous = BACKWARD;
+
+  // This is the total distance that the motor must move to compensate for
+  // backlash
+  float left_right_backlash_distance;
+  float up_down_backlash_distance;
+
+  //   Current state of the robot
+  //   These should contain the current state of the system
+  //   Not the parameters from the gcode command
+  float x_current;
+  float y_current;
+  float v_current;
+
+  // The current backlash offset in the x and y directions
+  float left_right_backlash_offset;
+  float up_down_backlash_offset;
+
+  float v_target_backlash;
+  float a_target_backlash;
 };
 
 // Define a struct to hold the parameters of a trapezoidal profile
@@ -58,16 +76,14 @@ struct TrapezoidVelocityTrajectory
 {
   // Start time of the profile
   unsigned long start_time_us = 0;
-  // Time from start for backlash compensation
-  unsigned long backlash_compensation_time_delta_us = 0;
-  // Time from start for backlash pause - zero velocity to reset stiction
-  unsigned long backlash_pause_time_delta_us = 0;
   //   Time from start for constant acceleration
   unsigned long acceleration_time_delta_us = 0;
   //   Time from start for constant velocity
   unsigned long coast_end_time_delta_us = 0;
   //   Time from start for constant deceleration
   unsigned long end_time_delta_us = 0;
+  //   Additional time to wait after the profile is complete
+  unsigned long end_delay_delta_us = 0;
 
   float dx = 0;
   float dy = 0;
@@ -77,12 +93,17 @@ struct TrapezoidVelocityTrajectory
   float v_target;
   float v_final;
 
-  float x_initial;
-  float y_initial;
-  float v_backlash_left_right;
-  float v_backlash_up_down;
-
   float a_target;
+  float a_backlash_target;
+
+  Direction left_right_direction;
+  Direction up_down_direction;
+};
+
+struct BacklashCompensatedTrajectory
+{
+  TrapezoidVelocityTrajectory profile;
+  TrapezoidVelocityTrajectory backlash_compensation_profile;
 
   Direction left_right_direction;
   Direction up_down_direction;
@@ -92,10 +113,7 @@ struct TrapezoidVelocityTrajectory
 struct TrajectoryState
 {
   bool backlash_compensation_phase = false;
-  //   Whether or not we should use OL positon
-  bool left_right_ol = false;
-  bool up_down_ol = false;
-  PositionVector p;
+
   VelocityVector v;
   AccelerationVector a;
   bool is_complete = false;
@@ -104,9 +122,15 @@ struct TrajectoryState
 TrapezoidVelocityTrajectory generate_trapezoid_profile(
     TrapezoidTrajectoryParameters args, float error_tolerance);
 
+BacklashCompensatedTrajectory generate_backlash_compensated_profile(
+    BacklashCompensatedTrajectoryParameters args, float error_tolerance);
+
 TrajectoryState compute_trapezoid_velocity_vector(
     TrapezoidVelocityTrajectory& profile, unsigned long time_us,
     float OL_THRESHOLD);
+
+TrajectoryState compute_backlash_compesated_trapezoid_velocity_vector(
+    BacklashCompensatedTrajectory& profile, unsigned long time_us);
 
 }  // namespace Planner
 #endif  // PLANNER_H
