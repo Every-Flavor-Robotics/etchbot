@@ -38,13 +38,13 @@ typedef union
 #define GEAR_RATIO (18.0f / 81.0f)  // Motor to knob
 #define RAD_PER_MM (0.1858f / GEAR_RATIO)
 #define MMPERMIN_TO_RADPERSEC (RAD_PER_MM / 60.0)
-#define ACCELERATION 16000
+#define ACCELERATION 8000
 #define MAX_ACCELERATION 25000
-#define UP_DOWN_BACKLASH_RAD (1.5 * RAD_PER_MM)
-#define LEFT_RIGHT_BACKLASH_RAD (1.8 * RAD_PER_MM)
-#define BACKLASH_COMEPSENATION_RADPERSEC 2.0
+#define UP_DOWN_BACKLASH_RAD (2.6 * RAD_PER_MM)
+#define LEFT_RIGHT_BACKLASH_RAD (2.0 * RAD_PER_MM)
+#define BACKLASH_COMEPSENATION_RADPERSEC 100.0f
 // mm * RAD_PER_MM = rad
-#define ERROR_TOLERANCE (0.2 * RAD_PER_MM)
+#define ERROR_TOLERANCE (0.8 * RAD_PER_MM)
 #define OL_THRESHOLD (0.2f * RAD_PER_MM)
 
 #define ENABLED
@@ -288,13 +288,13 @@ void setup()
   left_right.set_control_mode(MotorGo::ControlMode::Voltage);
   up_down.set_control_mode(MotorGo::ControlMode::Voltage);
 
-  pid_manager.init("CenturyLink1343", "3wx9qs9jn2pw5n");
+  pid_manager.init("The Lads", "Newo1435!");
 
   // Start the WebSocket server
   //   webSocket.begin();
   //   webSocket.onEvent(webSocketEvent);
 
-  stream = new GCode::WifiGCodeStream("192.168.0.102", 50);
+  stream = new GCode::WifiGCodeStream("192.168.5.9", 50);
   parser = new GCode::GCodeParser(stream, 2000);
 
   GCode::start_parser(*parser);
@@ -453,14 +453,14 @@ void loop_foc(void* pvParameters)
   }
 }
 
-Planner::TrapezoidVelocityTrajectory cur_trajectory;
+Planner::BacklashCompensatedTrajectoryParameters profile;
+
+Planner::BacklashCompensatedTrajectory cur_trajectory;
 Planner::Direction left_right_previous_direction = Planner::Direction::BACKWARD;
 Planner::Direction up_down_previous_direction = Planner::Direction::BACKWARD;
 float left_right_backlash_offset = 0;
 float up_down_backlash_offset = 0;
 
-float last_final_x = 0;
-float last_final_y = 0;
 GCode::MotionCommand command1;
 GCode::MotionCommand command2;
 
@@ -470,6 +470,8 @@ bool next_command_ready = false;
 GCode::MotionCommand* next_command = &command2;
 GCode::MotionCommand* temp_command;
 
+float previous_position_x = 0;
+float previous_position_y = 0;
 float previous_velocity_x = 0;
 float previous_velocity_y = 0;
 unsigned long previous_loop_time = 0;
@@ -502,7 +504,23 @@ void loop()
     // delay(1000);
 
     float rad = left_right.get_position();
-    float mm = rad / (RAD_PER_MM);
+
+    profile.main_profile.x_initial =
+        left_right.get_position() - left_right_backlash_offset;
+    profile.main_profile.y_initial =
+        up_down.get_position() - up_down_backlash_offset;
+
+    profile.main_profile.x_final =
+        constrain(current_command->x * RAD_PER_MM, 0, X_LIM * RAD_PER_MM);
+    profile.main_profile.y_final =
+        constrain(current_command->y * RAD_PER_MM, 0, Y_LIM * RAD_PER_MM);
+
+    profile.main_profile.v_initial = 0;
+    profile.main_profile.v_target =
+        current_command->feedrate * MMPERMIN_TO_RADPERSEC;
+    profile.main_profile.v_final = 0;
+
+    profile.main_profile.a_target = ACCELERATION;
 
     // Print final position in rad and mm
     // Serial.println("Final position: " + String(rad, 5) + "rad, " +
@@ -538,70 +556,32 @@ void loop()
   if (foc_loops.load() >= replan_horizon && !state.backlash_compensation_phase)
   {
     unsigned long trajectory_start_time = micros();
-    Planner::TrapezoidTrajectoryParameters profile;
-    // Serial.println("position: " + String(left_right.get_position()) + "\t" +
-    //                left_right_backlash_offset);
 
-    // Serial.println("position y: " + String(up_down.get_position()) + "\t" +
-    //                up_down_backlash_offset);
-
-    profile.x_initial = left_right.get_position();
-    profile.y_initial = up_down.get_position();
-
-    // Construct a string, print left right position and backlash offset
-    // String test = "position: " +
-    //               String(profile.x_initial + left_right_backlash_offset, 5) +
-    //               "\t" + String(left_right_backlash_offset, 5);
-
-    // freq_println(test, 4);
-
-    profile.previous_left_right_direction = left_right_previous_direction;
-    profile.previous_up_down_direction = up_down_previous_direction;
-    profile.backlash_compensation = true;
-    profile.left_right_backlash_compensation_distance = LEFT_RIGHT_BACKLASH_RAD;
-    profile.up_down_backlash_compensation_distance = UP_DOWN_BACKLASH_RAD;
-    profile.backlash_compensation_velocity = BACKLASH_COMEPSENATION_RADPERSEC;
-
-    profile.x_final =
-        constrain(current_command->x * RAD_PER_MM + left_right_backlash_offset,
-                  0, X_LIM * RAD_PER_MM);
-    profile.y_final =
-        constrain(current_command->y * RAD_PER_MM + up_down_backlash_offset, 0,
-                  Y_LIM * RAD_PER_MM);
-
-    // Print target in rad and mm
-
-    // String test = "position: " + String(profile.x_final, 5) + "rad, " +
-    //               String(profile.x_final / (RAD_PER_MM), 5) + "mm";
-
-    // freq_println(test, 10);
+    profile.x_current = left_right.get_position() - left_right_backlash_offset;
+    profile.y_current = up_down.get_position() - up_down_backlash_offset;
 
     // Compute current velocity magnitude
-    float current_velocity =
+    profile.v_current =
         sqrt(pow(cur_left_right_velocity, 2) + pow(cur_up_down_velocity, 2));
 
-    // For now, fix initial and final velocities to 0
-    profile.v_initial = current_velocity;
-    profile.v_final = 0;
-    profile.v_target = current_command->feedrate * MMPERMIN_TO_RADPERSEC;
-    profile.a_target = ACCELERATION;
+    profile.left_right_backlash_offset = left_right_backlash_offset;
+    profile.up_down_backlash_offset = up_down_backlash_offset;
 
-    last_final_x = profile.x_final;
-    last_final_y = profile.y_final;
-    cur_trajectory =
-        Planner::generate_trapezoid_profile(profile, ERROR_TOLERANCE);
-    cur_trajectory.start_time_us = trajectory_start_time;
+    profile.left_right_backlash_distance = LEFT_RIGHT_BACKLASH_RAD;
+    profile.up_down_backlash_distance = UP_DOWN_BACKLASH_RAD;
 
-    // delay(10000);
+    profile.v_target_backlash = BACKLASH_COMEPSENATION_RADPERSEC;
+    // TODO: CHANGE THIS
+    profile.a_target_backlash = ACCELERATION;
 
-    // trajectory_start_time = micros();
+    profile.left_right_direction_previous = left_right_previous_direction;
+    profile.up_down_direction_previous = up_down_previous_direction;
+    profile.backlash_compensation_enabled = true;
 
-    // Update backlash offset
-    left_right_backlash_offset +=
-        sign(cur_trajectory.v_backlash_left_right) * LEFT_RIGHT_BACKLASH_RAD;
-
-    up_down_backlash_offset +=
-        sign(cur_trajectory.v_backlash_up_down) * UP_DOWN_BACKLASH_RAD;
+    cur_trajectory = Planner::generate_backlash_compensated_profile(
+        profile, ERROR_TOLERANCE);
+    cur_trajectory.backlash_compensation_profile.start_time_us =
+        trajectory_start_time;
 
     // Serial.println(sign(cur_trajectory.v_backlash_left_right));
     // Serial.println(sign(cur_trajectory.v_backlash_up_down));
@@ -624,8 +604,8 @@ void loop()
 
   //   Update velocity commands based on current profile
   unsigned long now = micros();
-  state = Planner::compute_trapezoid_velocity_vector(cur_trajectory, now,
-                                                     OL_THRESHOLD);
+  state = Planner::compute_backlash_compesated_trapezoid_velocity_vector(
+      cur_trajectory, now);
 
   float accel_x =
       (state.v.x - previous_velocity_x) / (now - previous_loop_time) * 1e6;
@@ -646,31 +626,44 @@ void loop()
                 (MAX_ACCELERATION / accel) * (state.v.y - previous_velocity_y);
   }
 
-  if (state.left_right_ol)
+  left_right_velocity_target.store(state.v.x);
+  left_right_acceleration_target.store(state.a.x);
+
+  up_down_velocity_target.store(state.v.y);
+  up_down_acceleration_target.store(state.a.y);
+
+  //   Compute magnitude of speed
+  float speed = sqrt(pow(state.v.x, 2) + pow(state.v.y, 2));
+
+  if (speed < 0.01)
   {
-    left_right_position_target.store(state.p.x);
-  }
-  else
-  {
-    left_right_velocity_target.store(state.v.x);
-    left_right_acceleration_target.store(state.a.x);
+    delay(1000);
   }
 
-  if (state.up_down_ol)
-  {
-    up_down_position_target.store(state.p.y);
-  }
-  else
-  {
-    up_down_velocity_target.store(state.v.y);
-    up_down_acceleration_target.store(state.a.y);
-  }
+  //   Print velocity and acceleration targets
+  //   String str =
+  //       "Velocity targets: " + String(state.v.x) + ", " + String(state.v.y) +
+  //       " Acceleration targets: " + String(state.a.x) + ", " +
+  //       String(state.a.y);
 
-  left_right_ol_mode.store(state.left_right_ol);
-  up_down_ol_mode.store(state.up_down_ol);
+  //   freq_println(str, 50);
 
   previous_velocity_x = state.v.x;
   previous_velocity_y = state.v.y;
+
+  float cur_position_x = left_right.get_position();
+  float cur_position_y = up_down.get_position();
+
+  // Update the backlash offsets
+  left_right_backlash_offset = constrain(
+      left_right_backlash_offset + cur_position_x - previous_position_x, 0,
+      LEFT_RIGHT_BACKLASH_RAD);
+  up_down_backlash_offset =
+      constrain(up_down_backlash_offset + cur_position_y - previous_position_y,
+                0, UP_DOWN_BACKLASH_RAD);
+
+  previous_position_x = cur_position_x;
+  previous_position_y = cur_position_y;
 
   if (!next_command_ready && parser->is_available())
   {

@@ -11,7 +11,7 @@ const MotorGo::MotorConfiguration OGMotor(11,        // pole_pairs
 );
 
 const MotorGo::MotorConfiguration GARTTLeftTronix(11,        // pole_pairs
-                                                  338.85,    // kv
+                                                  374.59,    // kv
                                                   0.1088f,   // phase_resistance
                                                   NOT_SET,   // phase_inductance
                                                   4.5,       // voltage_limit
@@ -21,7 +21,7 @@ const MotorGo::MotorConfiguration GARTTLeftTronix(11,        // pole_pairs
 );
 
 const MotorGo::MotorConfiguration GARTTRightTronix(11,       // pole_pairs
-                                                   374.59,   // kv
+                                                   338.85,   // kv
                                                    0.1088f,  // phase_resistance
                                                    NOT_SET,  // phase_inductance
                                                    4.5,      // voltage_limit
