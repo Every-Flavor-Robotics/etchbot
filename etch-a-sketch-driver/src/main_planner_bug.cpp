@@ -8,6 +8,7 @@
 #include <chrono>
 #include <vector>
 
+#include "HTTPClient.h"
 #include "common/lowpass_filter.h"
 #include "common/pid.h"
 #include "configurable.h"
@@ -17,21 +18,6 @@
 #include "planner.h"
 #include "web_server.h"
 #include "wifi_gcode_stream.h"
-
-// Type for saving and loading calibration parameters to/from EEPROM
-const int DATA_PACKET_LEN =
-    sizeof(long) + 10 * sizeof(char) + sizeof(float) + sizeof(int);
-typedef union
-{
-  struct __attribute__((packed))
-  {
-    char name[10];
-    long timestamp;
-    float sampleValue;
-  };
-
-  uint8_t raw[DATA_PACKET_LEN];
-} data_packet_t;
 
 //  Conversion from mm to radians
 // #define GEAR_RATIO 30.0 / 66.0  // Motor to knob
@@ -62,9 +48,10 @@ size_t replan_horizon = 1;
 TaskHandle_t loop_foc_task;
 TickType_t xLastWakeTime;
 void loop_foc(void* pvParameters);
+
 MotorGo::MotorGoMini motorgo_mini;
-MotorGo::MotorChannel& left_right = motorgo_mini.ch0;
-MotorGo::MotorChannel& up_down = motorgo_mini.ch1;
+MotorGo::MotorChannel& left_right = motorgo_mini.ch1;
+MotorGo::MotorChannel& up_down = motorgo_mini.ch0;
 
 MotorGo::ChannelConfiguration config_ch0;
 MotorGo::ChannelConfiguration config_ch1;
@@ -99,7 +86,6 @@ LowPassFilter planner_up_down_velocity_lpf(0.000);
 MotorGo::PIDManager pid_manager;
 
 // Motor definitions
-
 std::atomic<float> left_right_position_target(0.0);
 std::atomic<float> up_down_position_target(0.0);
 std::atomic<float> up_down_velocity_target(0.0);
@@ -121,6 +107,15 @@ bool disable_flag = false;
 bool motors_enabled = false;
 ESPWifiConfig::Configurable<bool> enable_motors(motors_enabled, "/enable",
                                                 "Enable motors");
+
+unsigned long start_time = 0;
+
+String ssid = ".............";
+String password = ".............";
+GCode::GCodeParser* parser;
+GCode::WifiGCodeStream* stream;
+
+Planner::TrajectoryState state;
 
 void freq_println(String str, int freq)
 {
@@ -169,15 +164,6 @@ void home()
   left_right.zero_position();
   up_down.zero_position();
 }
-
-unsigned long start_time = 0;
-
-// GCode objects
-GCode::GCodeParser* parser;
-GCode::WifiGCodeStream* stream;
-
-bool direction = true;
-Planner::TrajectoryState state;
 
 void setup()
 {
@@ -288,13 +274,9 @@ void setup()
   left_right.set_control_mode(MotorGo::ControlMode::Voltage);
   up_down.set_control_mode(MotorGo::ControlMode::Voltage);
 
-  pid_manager.init("The Lads", "Newo1435!");
+  pid_manager.init(ssid, password);
 
-  // Start the WebSocket server
-  //   webSocket.begin();
-  //   webSocket.onEvent(webSocketEvent);
-
-  stream = new GCode::WifiGCodeStream("192.168.5.9", 50);
+  stream = new GCode::WifiGCodeStream("192.168.10.15", 50);
   parser = new GCode::GCodeParser(stream, 2000);
 
   GCode::start_parser(*parser);
@@ -314,9 +296,6 @@ void setup()
 
   left_right.zero_position();
   up_down.zero_position();
-  //   left_right.enable();
-  //   up_down.enable();
-  //   home();
   state.is_complete = true;
 }
 
