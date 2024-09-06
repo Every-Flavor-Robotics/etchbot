@@ -17,7 +17,7 @@ const MotorGo::MotorConfiguration GARTTLeftTronix(11,        // pole_pairs
                                                   4.5,       // voltage_limit
                                                   6.0f,      // current_limit
                                                   10000.0f,  // velocity_limit
-                                                  1.3f  // calibration_voltage
+                                                  1.5f  // calibration_voltage
 );
 
 const MotorGo::MotorConfiguration GARTTRightTronix(11,       // pole_pairs
@@ -31,23 +31,23 @@ const MotorGo::MotorConfiguration GARTTRightTronix(11,       // pole_pairs
 );
 
 const MotorGo::MotorConfiguration GARTTLeftEtch1(11,        // pole_pairs
-                                                 187,       // kv
+                                                 410,       // kv
                                                  0.1088f,   // phase_resistance
                                                  NOT_SET,   // phase_inductance
                                                  4.5,       // voltage_limit
                                                  6.0f,      // current_limit
                                                  10000.0f,  // velocity_limit
-                                                 1.1f  // calibration_voltage
+                                                 1.4f  // calibration_voltage
 );
 
 const MotorGo::MotorConfiguration GARTTRightEtch1(11,        // pole_pairs
-                                                  189,       // kv
+                                                  390,       // kv
                                                   0.1088f,   // phase_resistance
                                                   NOT_SET,   // phase_inductance
                                                   4.5,       // voltage_limit
                                                   6.0f,      // current_limit
                                                   10000.0f,  // velocity_limit
-                                                  1.1f  // calibration_voltage
+                                                  1.4f  // calibration_voltage
 );
 
 // PID PARAMETERS

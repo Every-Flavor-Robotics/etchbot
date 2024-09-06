@@ -24,7 +24,8 @@
 #define GEAR_RATIO (18.0f / 81.0f)  // Motor to knob
 #define RAD_PER_MM (0.1858f / GEAR_RATIO)
 #define MMPERMIN_TO_RADPERSEC (RAD_PER_MM / 60.0)
-#define ACCELERATION 8000
+#define ACCELERATION 15000
+#define BACKLASH_ACCELERATION 8000
 #define MAX_ACCELERATION 25000
 #define UP_DOWN_BACKLASH_RAD (2.6 * RAD_PER_MM)
 #define LEFT_RIGHT_BACKLASH_RAD (2.0 * RAD_PER_MM)
@@ -156,11 +157,11 @@ void home()
 void draw_pre_setup()
 {
   // Setup motor parameters
-  config_ch0.motor_config = GARTTLeftTronix;
+  config_ch0.motor_config = GARTTLeftEtch1;
   config_ch0.power_supply_voltage = 15.0;
   config_ch0.reversed = false;
 
-  config_ch1.motor_config = GARTTRightTronix;
+  config_ch1.motor_config = GARTTRightEtch1;
   config_ch1.power_supply_voltage = 15.0;
   config_ch1.reversed = false;
 
@@ -408,7 +409,7 @@ bool draw_loop()
       up_down.get_position() > (Y_LIM + 8) * RAD_PER_MM ||
       up_down.get_position() < -8 * RAD_PER_MM)
   {
-    // Serial.println("Position out of bounds");
+    Serial.println("Position out of bounds");
     disable_flag = true;
   }
 
@@ -493,8 +494,7 @@ bool draw_loop()
     profile.up_down_backlash_distance = UP_DOWN_BACKLASH_RAD;
 
     profile.v_target_backlash = BACKLASH_COMEPSENATION_RADPERSEC;
-    // TODO: CHANGE THIS
-    profile.a_target_backlash = ACCELERATION;
+    profile.a_target_backlash = BACKLASH_ACCELERATION;
 
     profile.left_right_direction_previous = left_right_previous_direction;
     profile.up_down_direction_previous = up_down_previous_direction;
