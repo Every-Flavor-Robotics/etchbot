@@ -23,6 +23,15 @@ Planner::TrapezoidVelocityTrajectory Planner::generate_trapezoid_profile(
   float dy = args.y_final - args.y_initial;
   float d_total = sqrt(dx * dx + dy * dy);
 
+  //   Serial.println("----------");
+  //   Serial.println("In planner");
+  //   Serial.println("Initial position: (" + String(args.x_initial, 5) + ", " +
+  //                  String(args.y_initial, 5) + ")");
+  //   Serial.println("Final position: (" + String(args.x_final, 5) + ", " +
+  //                  String(args.y_final, 5) + ")");
+
+  //   Serial.println("----------");
+
   //   Construct profile
   Planner::TrapezoidVelocityTrajectory profile;
 
@@ -287,7 +296,7 @@ Planner::generate_backlash_compensated_profile(
       backlash_compensation_args.y_final = args.up_down_backlash_offset;
     }
 
-    backlash_compensation_args.end_delay_us = 1e6;
+    backlash_compensation_args.end_delay_us = 0;
 
     // Serial.println("Backlash compensation args:");
     // Serial.println("x_initial: " +
