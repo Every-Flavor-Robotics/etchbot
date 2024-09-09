@@ -10,10 +10,8 @@
 #include "configurable.h"
 #include "pid_manager.h"
 
-// Intentionally crash compiler
-code breaks;
-const char* ssid = "............";
-const char* password = "............";
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
 
 #define FLIPPING_VELOCITY_RAD_PER_SEC 2.0
 
@@ -204,7 +202,7 @@ void setup()
   gm3506_config.calibration_voltage = 2.0;
 
   config_ch1.motor_config = gm3506_config;
-  config_ch1.power_supply_voltage = 15.0;
+  config_ch1.power_supply_voltage = 9.0;
   config_ch1.reversed = true;
 
   tilt_motor.init(config_ch1, false);
