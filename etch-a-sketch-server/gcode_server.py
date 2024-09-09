@@ -57,12 +57,12 @@ class GCode:
         self.line_number = 0
 
     def load(self):
-        with open(gcode_file) as f:
+        with open(self.gcode_file) as f:
             self.gcode_lines = f.readlines()
             self.gcode_lines.append("G28\n")
             self.gcode_lines.append("END\n")
 
-        print(f"Read in {len(self.gcode_lines)} lines from {gcode_file}.")
+        print(f"Read in {len(self.gcode_lines)} lines from {self.gcode_file}.")
         self.loaded = True
 
     def get_gcode(self, num_lines):
@@ -148,6 +148,8 @@ class Drawing:
         self.artifact_dir = processing_dir / self.ARTIFACTS_DIR
         self.artifact_dir.mkdir(exist_ok=True)
 
+        self.processing_dir = processing_dir
+
         self.ready = True
 
     def get_artifiact_dir(self):
@@ -193,9 +195,9 @@ class Drawing:
         return self.gcodes.pop(0)
 
     def get_zipped_artifact(self) -> pathlib.Path:
-        # Zip the artifact directory
-        artifact_zip = self.artifact_dir
-        archive_path = shutil.make_archive(artifact_zip, "zip", self.artifact_dir)
+        # Name of archive should be name of processing dir
+        name = self.processing_dir.stem
+        archive_path = shutil.make_archive(name, "zip", self.processing_dir)
 
         return Path(archive_path)
 

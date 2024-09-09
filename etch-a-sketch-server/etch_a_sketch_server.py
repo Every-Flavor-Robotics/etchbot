@@ -108,6 +108,8 @@ def get_etchbot_status(etchbot_name):
     # Current drawing
     # Is camera connected
     # Is camera recording
+    # Paused
+    # Cooldown remaining
 
     try:
         if etchbot_name not in etchbot_store:
@@ -129,6 +131,9 @@ def get_etchbot_status(etchbot_name):
             "camera_recording": (
                 etchbot.camera.is_recording if etchbot.camera else False
             ),
+            "recording_mode": etchbot.record_while_drawing,
+            "paused": etchbot.paused,
+            "cooldown_remaining": etchbot.cooldown_remaining(),
         }
 
         return jsonify(status), 200
@@ -244,6 +249,84 @@ def connect_camera(etchbot_name):
         return jsonify({"error": f"Failed to connect to camera service: {e}"}), 500
 
 
+@app.route("/etchbot/<etchbot_name>/set_recording_mode", methods=["POST"])
+def set_recording_mode(etchbot_name):
+    try:
+        data = request.get_json()
+        recording_mode = data.get("recording_mode")
+
+        if recording_mode is None:
+            return jsonify({"error": "No recording mode provided"}), 400
+
+        # Recording mode should be either true or false
+        if recording_mode not in [True, False]:
+            return jsonify({"error": "Invalid recording mode"}), 400
+
+        if etchbot_name not in etchbot_store:
+            return jsonify({"error": f"EtchBot {etchbot_name} not found"}), 404
+
+        etchbot = etchbot_store.get_robot_by_name(etchbot_name)
+
+        if recording_mode:
+            etchbot.enable_recording()
+
+        else:
+            etchbot.disable_recording()
+
+        return (
+            jsonify({"message": f"Recording mode set to {recording_mode}"}),
+            200,
+        )
+    except Exception as e:
+        print(f"Error setting recording mode: {e}")
+        return jsonify({"error": f"Failed to set recording mode: {e}"}), 500
+
+
+@app.route("/etchbot/<etchbot_name>/pause", methods=["POST"])
+def pause_etchbot(etchbot_name):
+    try:
+        if etchbot_name not in etchbot_store:
+            return jsonify({"error": f"EtchBot {etchbot_name} not found"}), 404
+
+        etchbot = etchbot_store.get_robot_by_name(etchbot_name)
+        etchbot.pause()
+
+        return jsonify({"message": "EtchBot paused"}), 200
+    except Exception as e:
+        print(f"Error pausing EtchBot: {e}")
+        return jsonify({"error": f"Failed to pause EtchBot: {e}"}), 500
+
+
+@app.route("/etchbot/<etchbot_name>/resume", methods=["POST"])
+def resume_etchbot(etchbot_name):
+    try:
+        if etchbot_name not in etchbot_store:
+            return jsonify({"error": f"EtchBot {etchbot_name} not found"}), 404
+
+        etchbot = etchbot_store.get_robot_by_name(etchbot_name)
+        etchbot.resume()
+
+        return jsonify({"message": "EtchBot resumed"}), 200
+    except Exception as e:
+        print(f"Error resuming EtchBot: {e}")
+        return jsonify({"error": f"Failed to resume EtchBot: {e}"}), 500
+
+
+@app.route("/etchbot/<etchbot_name>/clear_error", methods=["POST"])
+def clear_error(etchbot_name):
+    try:
+        if etchbot_name not in etchbot_store:
+            return jsonify({"error": f"EtchBot {etchbot_name} not found"}), 404
+
+        etchbot = etchbot_store.get_robot_by_name(etchbot_name)
+        etchbot.recover()
+
+        return jsonify({"message": "EtchBot error cleared"}), 200
+    except Exception as e:
+        print(f"Error clearing EtchBot error: {e}")
+        return jsonify({"error": f"Failed to clear EtchBot error: {e}"}), 500
+
+
 ### EtchBot API ###
 # This API is used to communicate with the EtchBots
 
@@ -277,7 +360,7 @@ def connect():
             return jsonify({"error": "No IP address provided"}), 400
 
         name = data["name"]
-        ip = data["ip"]
+        ip = data["ip"].strip()
 
         # Check if the EtchBot instance already exists, if not create a new one
         etchbot = None
@@ -292,7 +375,8 @@ def connect():
 
         # Connect the EtchBot
         try:
-            etchbot.connect()
+            if not etchbot.handle_connect_request():
+                return jsonify({"error": "Failed to connect to EtchBot"}), 500
 
         except MachineError as e:
             return jsonify({"error": str(e)}), 500
@@ -396,7 +480,7 @@ def drawing_complete():
         etchbot = etchbot_store.get_robot_by_name(name)
 
         # Notify the EtchBot that drawing is complete
-        etchbot.drawing_complete()
+        etchbot.drawing_complete(drawing_time=drawing_time)
 
         print(f"EtchBot {name} drawing completion notified.")
 

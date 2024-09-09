@@ -33,6 +33,7 @@ class EtchBot:
                 "ERROR",
             ],
             initial="WAITING_FOR_CONNECTION",
+            send_event=True,
             transitions=[
                 {
                     "trigger": "connect",
@@ -40,10 +41,15 @@ class EtchBot:
                     "dest": "READY",
                 },
                 {
+                    "trigger": "connect",
+                    "source": "READY",
+                    "dest": "READY",
+                },
+                {
                     "trigger": "start_command",
                     "source": "READY",
                     "dest": "DRAWING",
-                    "conditions": ["ready_to_draw"],
+                    "conditions": ["ready_to_draw", "cooldown_complete"],
                 },
                 {
                     "trigger": "start_command",
@@ -87,10 +93,19 @@ class EtchBot:
                     "source": ["READY"],
                     "dest": "WAITING_FOR_CONNECTION",
                 },
-                {"trigger": "recover", "source": "ERROR", "dest": "READY"},
+                {
+                    "trigger": "recover",
+                    "source": "ERROR",
+                    "dest": "WAITING_FOR_CONNECTION",
+                },
                 {
                     "trigger": "start_command",
                     "source": ["DRAWING", "ERASING"],
+                    "dest": "ERROR",
+                },
+                {
+                    "trigger": "connect",
+                    "source": "DRAWING",
                     "dest": "ERROR",
                 },
             ],
@@ -121,6 +136,9 @@ class EtchBot:
         self.record_while_drawing = False
 
         self.camera = None
+
+        self.cooldown_start = 0
+        self.cooldown_time = 0
 
         # Register the state machine callbacks
 
@@ -159,6 +177,18 @@ class EtchBot:
 
     def _update_heartbeat(self):
         self.last_heartbeat = time.time()
+
+    def handle_connect_request(self):
+        if self.may_connect():
+            self.connect()
+            return True
+
+        print(
+            f"Cannot connect to {self.name}. Robot is not in the correct state, error."
+        )
+        self.error()
+
+        return False
 
     def get_command(self):
         # Log the current time as the last heartbeat
@@ -224,7 +254,7 @@ class EtchBot:
 
         return completed_information
 
-    def ready_to_draw(self):
+    def ready_to_draw(self, event):
         print(f"{self.name} is checking if a command is ready.")
         # Print length of the queue and the current state
         print(f"Queue length: {len(self.queue)}")
@@ -252,10 +282,10 @@ class EtchBot:
         if len(self.queue) > 0:
             return self.queue[0]
 
-    def ready_to_erase(self):
+    def ready_to_erase(self, event):
         return not self.paused and self.drawing_success
 
-    def is_paused(self):
+    def is_paused(self, event):
         return self.paused
 
     def pause(self):
@@ -265,12 +295,12 @@ class EtchBot:
         self.paused = False
 
     # State machine methods
-    def on_enter_WAITING_FOR_CONNECTION(self):
+    def on_enter_WAITING_FOR_CONNECTION(self, event):
         print(f"Ready to accept connection for {self.name}.")
 
         self.watchdog_active = False
 
-    def on_enter_READY(self):
+    def on_enter_READY(self, event):
         print(f"{self.name} is ready to draw.")
 
         self._update_heartbeat()
@@ -279,8 +309,11 @@ class EtchBot:
         self.watchdog_active = True
         self.watchdog_timeout_seconds = self.watchdog_timeout_seconds_READY
 
-    def on_enter_DRAWING(self):
+    def on_enter_DRAWING(self, event):
         print(f"{self.name} is drawing.")
+
+        # Reset the GCode at the beginning of the queue
+        self.next_gcode().reset()
 
         # We need to send the GCode to the GCode server to queue it up
         # We are not expecting an immediate response during drawing phase
@@ -288,7 +321,7 @@ class EtchBot:
 
         self.command = "draw"
 
-    def on_enter_POST_DRAWING_ACTIONS(self):
+    def on_enter_POST_DRAWING_ACTIONS(self, event):
         print(f"{self.name} has finished drawing.")
 
         # Set the drawing complete flag
@@ -299,6 +332,12 @@ class EtchBot:
 
         # Clear the command
         self.command = ""
+
+        # Start cooldown timer
+        self.cooldown_start = time.time()
+        drawing_time = event.kwargs.get("drawing_time", 30)
+
+        self.cooldown_time = drawing_time * 0.75
 
         # Check if there is a camera connected
         if self.picture_thread is not None:
@@ -333,7 +372,7 @@ class EtchBot:
             # Drawing is complete, remove it from the queue and move it to the completed drawings
             self.completed_drawings.append(self.queue.pop(0))
 
-    def on_enter_ERASING(self):
+    def on_enter_ERASING(self, event):
         print(f"{self.name} is erasing.")
 
         # Change the watchdog timeout
@@ -342,7 +381,7 @@ class EtchBot:
 
         self.command = "erase"
 
-    def on_enter_POST_ERASING_ACTIONS(self):
+    def on_enter_POST_ERASING_ACTIONS(self, event):
         print(f"{self.name} has finished erasing.")
 
         # Set the drawing complete flag, ready for the next
@@ -361,12 +400,23 @@ class EtchBot:
 
         self.drawing_success = False
 
-    def on_enter_ERROR(self):
+    def cooldown_complete(self, event):
+        return self.cooldown_remaining() == 0
+
+    def cooldown_remaining(self):
+        time_delta = self.cooldown_time - (time.time() - self.cooldown_start)
+
+        if time_delta < 0:
+            return 0
+
+        return time_delta
+
+    def on_enter_ERROR(self, event):
         print(f"{self.name} has encountered an error.")
         # Stop the watchdog thread
         self.watchdog_active = False
 
-    def on_exit_ERROR(self):
+    def on_exit_ERROR(self, event):
         print(f"{self.name} is recovering from an error.")
 
     def _watchdog_thread(self):
@@ -388,6 +438,12 @@ class EtchBot:
 
             # Signal that the picture has been captured, robot is ready to draw
             self.post_drawing_actions_complete()
+
+    def enable_recording(self):
+        self.record_while_drawing = True
+
+    def disable_recording(self):
+        self.record_while_drawing = False
 
 
 class EtchBotStore:
@@ -426,7 +482,9 @@ class EtchBotStore:
     def get_robot_by_name(self, name) -> "EtchBot":
         return self.name_dict.get(name, None)
 
-    def get_robot_by_ip(self, ip) -> "EtchBot":
+    def get_robot_by_ip(self, ip: str) -> "EtchBot":
+        if ip is None or type(ip) is not str:
+            return None
         return self.ip_dict.get(ip, None)
 
     def get_all_robots(self):
