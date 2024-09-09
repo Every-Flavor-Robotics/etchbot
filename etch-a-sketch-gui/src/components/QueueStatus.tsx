@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Spinner, Text, HStack } from "@chakra-ui/react";
 import axios from "axios";
 
+
 interface QueueItem {
     name: string;
     length: number;
@@ -12,7 +13,9 @@ interface QueueStatusProps {
     etchbotName: string;
 }
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5010';
+
+// const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5010';
+const API_URL = 'http://localhost:5010';
 
 
 const QueueStatus: React.FC<QueueStatusProps> = ({ etchbotName }) => {
@@ -24,7 +27,7 @@ const QueueStatus: React.FC<QueueStatusProps> = ({ etchbotName }) => {
     const fetchQueueStatus = async () => {
         setUpdating(true);
         try {
-            const response = await axios.get("${API_URL}/etchbot/queue", {
+            const response = await axios.get(API_URL + "/etchbot/queue", {
                 params: { name: etchbotName },
             });
             setQueue(Object.values(response.data.queue));

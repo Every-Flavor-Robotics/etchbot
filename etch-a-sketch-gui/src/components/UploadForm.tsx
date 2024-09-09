@@ -6,7 +6,9 @@ interface UploadFormProps {
     etchbotName: string;
 }
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5010';
+// const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5010';
+const API_URL = 'http://localhost:5010';
+
 
 
 const UploadForm: React.FC<UploadFormProps> = ({ etchbotName }) => {
@@ -33,7 +35,7 @@ const UploadForm: React.FC<UploadFormProps> = ({ etchbotName }) => {
         setError(null);
 
         try {
-            const response = await axios.post(`${API_URL}/upload/${etchbotName}`, formData, {
+            const response = await axios.post(API_URL + `/upload/${etchbotName}`, formData, {
                 headers: {
                     "Content-Type": "multipart/form-data",
                 },

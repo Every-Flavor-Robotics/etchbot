@@ -18,9 +18,6 @@ const stateColors: { [key: string]: string } = {
     ERROR: "red",
 };
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5010';
-
-
 const App: React.FC = () => {
     const [etchbots, setEtchbots] = useState<Etchbot[]>([]);
     const [selectedEtchbot, setSelectedEtchbot] = useState<Etchbot | null>(null);
@@ -30,13 +27,13 @@ const App: React.FC = () => {
     useEffect(() => {
         const fetchEtchbotsAndStates = async () => {
             try {
-                const response = await axios.get("${API_URL}/etchbots");
+                const response = await axios.get("http://localhost:5010/etchbots");
                 const etchbotsData = response.data.etchbots;
 
                 if (Array.isArray(etchbotsData)) {
                     const etchbotsWithState = await Promise.all(
                         etchbotsData.map(async (name) => {
-                            const stateResponse = await axios.get("${API_URL}/etchbot/state", {
+                            const stateResponse = await axios.get("http://localhost:5010/etchbot/state", {
                                 params: { name }, // Pass the name as a query parameter
                             });
                             return {

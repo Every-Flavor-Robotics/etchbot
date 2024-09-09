@@ -7,8 +7,8 @@ interface CameraManagerProps {
     etchbotName: string;
 }
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5010';
-
+// const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5010';
+const API_URL = 'http://localhost:5010';
 
 const CameraManager: React.FC<CameraManagerProps> = ({ etchbotId, etchbotName }) => {
     const [serviceUrl, setServiceUrl] = useState("");
