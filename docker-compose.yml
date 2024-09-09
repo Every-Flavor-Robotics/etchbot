@@ -1,0 +1,15 @@
+version: '3.8' # or the version that matches your environment
+
+services:
+  etch-a-sketch-gui:
+    image: etch-a-sketch-gui:latest
+    ports:
+      - "80:80"
+
+  etch-a-sketch:
+    image: etch-a-sketch:latest
+    deploy:
+    ports:
+      - "5005:5005"
+      - "5010:5010"
+    tty: true
