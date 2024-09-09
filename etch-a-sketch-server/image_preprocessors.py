@@ -75,6 +75,9 @@ class AspectRatioPreprocessor(ImagePreprocessor):
                     # Save the cropped image
                     image.save(output_path)
 
+                # Delete the lock file
+                output_path.with_suffix(".lock").unlink()
+
                 break
             except:
                 pass
@@ -174,7 +177,11 @@ class ColorbookPreprocessor(ImagePreprocessor):
                     subprocess.run(
                         f"mv {outlined_path} {output_path}", check=True, shell=True
                     )
-                    break
+
+                output_path.with_suffix(".lock").unlink()
+
+                break
+
             except Timeout:
                 pass
 
