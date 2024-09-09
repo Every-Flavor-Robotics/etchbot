@@ -7,11 +7,10 @@ import CameraManager from "./CameraManager";
 import RobotStatus from "./RobotStatus"; // Import the RobotStatus component
 
 interface RobotPanelProps {
-    etchbotId: string;
     etchbotName: string;
 }
 
-const RobotPanel: React.FC<RobotPanelProps> = ({ etchbotId, etchbotName }) => {
+const RobotPanel: React.FC<RobotPanelProps> = ({etchbotName }) => {
     return (
         <Box p={5}>
             <Heading as="h1" mb={5} textAlign="center">
@@ -28,7 +27,7 @@ const RobotPanel: React.FC<RobotPanelProps> = ({ etchbotId, etchbotName }) => {
                     <UploadForm etchbotName={etchbotName} />
                 </GridItem>
                 <GridItem colSpan={[2, 1]}>
-                    <CameraManager etchbotId={etchbotId} etchbotName={etchbotName} />
+                    <CameraManager etchbotName={etchbotName} />
                 </GridItem>
                 <GridItem colSpan={2}>
                     <Divider />

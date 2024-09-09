@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Box, Heading, Text, Spinner, HStack, Button, useToast } from "@chakra-ui/react";
+import { Box, Heading, Text, HStack, Button, useToast } from "@chakra-ui/react";
 import axios from "axios";
 
 interface RobotStatusProps {
@@ -20,23 +20,24 @@ const API_URL = 'http://localhost:5010'; // Replace with actual API URL
 
 const RobotStatus: React.FC<RobotStatusProps> = ({ etchbotName }) => {
     const [status, setStatus] = useState<RobotStatusData | null>(null);
-    const [loading, setLoading] = useState(true);
+    // const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [updating, setUpdating] = useState(false);
+    // const [updating, setUpdating] = useState(false);
     const toast = useToast();
 
     const fetchStatus = async () => {
-        setUpdating(true);
+        // setUpdating(true);
         try {
             const response = await axios.get(`${API_URL}/etchbot/${etchbotName}/status`);
-            setStatus(response.data);
+            const data = response.data as RobotStatusData;
+            setStatus(data);
             setError(null);
         } catch (err) {
             console.error("Failed to fetch robot status", err);
             setError("Failed to retrieve robot status.");
         } finally {
-            setLoading(false);
-            setTimeout(() => setUpdating(false), 500); // Stop spinning after 1 second
+            // setLoading(false);
+            // setTimeout(() => setUpdating(false), 500); // Stop spinning after 1 second
         }
     };
 

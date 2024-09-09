@@ -8,6 +8,14 @@ interface Etchbot {
     state?: string;
 }
 
+interface EtchbotsResponse {
+    etchbots: string[];
+}
+
+interface EtchbotStateResponse {
+    state: string;
+}
+
 const stateColors: { [key: string]: string } = {
     DISCONNECTED: "gray",
     READY: "green",
@@ -28,17 +36,19 @@ const App: React.FC = () => {
         const fetchEtchbotsAndStates = async () => {
             try {
                 const response = await axios.get("http://localhost:5010/etchbots");
-                const etchbotsData = response.data.etchbots;
+                const etchbotsData = response.data as EtchbotsResponse; // Cast response data to EtchbotsResponse
 
-                if (Array.isArray(etchbotsData)) {
+                if (Array.isArray(etchbotsData.etchbots)) {
                     const etchbotsWithState = await Promise.all(
-                        etchbotsData.map(async (name) => {
+                        etchbotsData.etchbots.map(async (name) => {
                             const stateResponse = await axios.get("http://localhost:5010/etchbot/state", {
                                 params: { name }, // Pass the name as a query parameter
                             });
+                            const stateData = stateResponse.data as EtchbotStateResponse; // Cast stateResponse data to EtchbotStateResponse
+
                             return {
                                 name,
-                                state: stateResponse.data.state,
+                                state: stateData.state,
                             };
                         })
                     );

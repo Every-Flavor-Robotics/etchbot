@@ -9,6 +9,10 @@ interface CompletedItem {
     ready: boolean;
 }
 
+interface CompletedStatusResponse {
+    completed: CompletedItem[];
+}
+
 interface CompletedStatusProps {
     etchbotName: string;
 }
@@ -29,7 +33,9 @@ const CompletedStatus: React.FC<CompletedStatusProps> = ({ etchbotName }) => {
             const response = await axios.get(API_URL + "/etchbot/completed", {
                 params: { name: etchbotName },
             });
-            setCompleted(Object.values(response.data.completed));
+            // Type assertion to ensure correct typing of the response data
+            const data = response.data as CompletedStatusResponse;
+            setCompleted(Object.values(data.completed));
             setError(null);
         } catch (err) {
             console.error("Failed to fetch completed drawings", err);
@@ -48,7 +54,8 @@ const CompletedStatus: React.FC<CompletedStatusProps> = ({ etchbotName }) => {
                 responseType: 'blob', // Important to download files
             });
 
-            const url = window.URL.createObjectURL(new Blob([response.data]));
+            // Create a URL for the downloaded Blob
+            const url = window.URL.createObjectURL(new Blob([response.data as BlobPart])); // Cast response.data as BlobPart
             const link = document.createElement('a');
             link.href = url;
             link.setAttribute('download', `${name}.zip`); // Filename for download

@@ -3,14 +3,13 @@ import { Box, Heading, Input, Button, FormControl, FormLabel } from "@chakra-ui/
 import axios from "axios";
 
 interface CameraManagerProps {
-    etchbotId: string;
     etchbotName: string;
 }
 
 // const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5010';
 const API_URL = 'http://localhost:5010';
 
-const CameraManager: React.FC<CameraManagerProps> = ({ etchbotId, etchbotName }) => {
+const CameraManager: React.FC<CameraManagerProps> = ({ etchbotName }) => {
     const [serviceUrl, setServiceUrl] = useState("");
     const [cameraIndex, setCameraIndex] = useState(0);
     const [message, setMessage] = useState("");

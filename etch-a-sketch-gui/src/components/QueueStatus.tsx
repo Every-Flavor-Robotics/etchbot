@@ -9,6 +9,10 @@ interface QueueItem {
     ready: boolean;
 }
 
+interface QueueStatusResponse {
+    queue: QueueItem[];
+}
+
 interface QueueStatusProps {
     etchbotName: string;
 }
@@ -30,7 +34,9 @@ const QueueStatus: React.FC<QueueStatusProps> = ({ etchbotName }) => {
             const response = await axios.get(API_URL + "/etchbot/queue", {
                 params: { name: etchbotName },
             });
-            setQueue(Object.values(response.data.queue));
+            // Use type assertion to ensure the response is typed
+            const data = response.data as QueueStatusResponse;
+            setQueue(data.queue);
             setError(null);
         } catch (err) {
             console.error("Failed to fetch queue status", err);
