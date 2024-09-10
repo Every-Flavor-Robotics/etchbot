@@ -17,10 +17,7 @@ interface QueueStatusProps {
     etchbotName: string;
 }
 
-
-// const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5010';
-const API_URL = 'http://localhost:5010';
-
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5010';
 
 const QueueStatus: React.FC<QueueStatusProps> = ({ etchbotName }) => {
     const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -31,7 +28,7 @@ const QueueStatus: React.FC<QueueStatusProps> = ({ etchbotName }) => {
     const fetchQueueStatus = async () => {
         setUpdating(true);
         try {
-            const response = await axios.get(API_URL + "/etchbot/queue", {
+            const response = await axios.get(`${API_URL}/etchbot/queue`, {
                 params: { name: etchbotName },
             });
             // Use type assertion to ensure the response is typed

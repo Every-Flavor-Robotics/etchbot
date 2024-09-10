@@ -16,7 +16,7 @@ interface RobotStatusData {
     cooldown_remaining: number;
 }
 
-const API_URL = 'http://localhost:5010'; // Replace with actual API URL
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5010';
 
 const RobotStatus: React.FC<RobotStatusProps> = ({ etchbotName }) => {
     const [status, setStatus] = useState<RobotStatusData | null>(null);

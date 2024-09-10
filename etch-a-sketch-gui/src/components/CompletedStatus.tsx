@@ -17,8 +17,7 @@ interface CompletedStatusProps {
     etchbotName: string;
 }
 
-// const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5010';
-const API_URL = 'http://localhost:5010';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5010';
 
 
 const CompletedStatus: React.FC<CompletedStatusProps> = ({ etchbotName }) => {
@@ -30,7 +29,7 @@ const CompletedStatus: React.FC<CompletedStatusProps> = ({ etchbotName }) => {
     const fetchCompletedStatus = async () => {
         setUpdating(true);
         try {
-            const response = await axios.get(API_URL + "/etchbot/completed", {
+            const response = await axios.get(`${API_URL}/etchbot/completed`, {
                 params: { name: etchbotName },
             });
             // Type assertion to ensure correct typing of the response data
@@ -48,7 +47,7 @@ const CompletedStatus: React.FC<CompletedStatusProps> = ({ etchbotName }) => {
 
     const handleDownload = async (name: string, index: number) => {
         try {
-            const response = await axios.post(API_URL + `/etchbot/${etchbotName}/download_zip`, {
+            const response = await axios.post(`${API_URL}/etchbot/${etchbotName}/download_zip`, {
                 drawing_index: index, // Pass the index instead of the name
             }, {
                 responseType: 'blob', // Important to download files

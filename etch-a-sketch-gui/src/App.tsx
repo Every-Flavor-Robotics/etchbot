@@ -34,14 +34,16 @@ const App: React.FC = () => {
     // Fetch etchbots and their states
     useEffect(() => {
         const fetchEtchbotsAndStates = async () => {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5010'; // Use the environment variable or fallback to localhost
+
             try {
-                const response = await axios.get("http://localhost:5010/etchbots");
+                const response = await axios.get(`${apiUrl}/etchbots`);
                 const etchbotsData = response.data as EtchbotsResponse; // Cast response data to EtchbotsResponse
 
                 if (Array.isArray(etchbotsData.etchbots)) {
                     const etchbotsWithState = await Promise.all(
                         etchbotsData.etchbots.map(async (name) => {
-                            const stateResponse = await axios.get("http://localhost:5010/etchbot/state", {
+                            const stateResponse = await axios.get(`${apiUrl}/etchbot/state`, {
                                 params: { name }, // Pass the name as a query parameter
                             });
                             const stateData = stateResponse.data as EtchbotStateResponse; // Cast stateResponse data to EtchbotStateResponse

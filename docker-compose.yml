@@ -2,13 +2,20 @@ version: '3.8' # or the version that matches your environment
 
 services:
   etch-a-sketch-gui:
-    image: etch-a-sketch-gui:latest
+    build:
+      context: etch-a-sketch-gui
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://${HOST_IP}:5010 # Pass the build arg
     ports:
       - "80:80"
+    environment:
+      - VITE_API_URL=http://${HOST_IP}:5010 # Use host IP for API URL
 
-  etch-a-sketch:
-    image: etch-a-sketch:latest
-    deploy:
+  etch-a-sketch-server:
+    build:
+      context: etch-a-sketch-server
+      dockerfile: Dockerfile
     ports:
       - "5005:5005"
       - "5010:5010"

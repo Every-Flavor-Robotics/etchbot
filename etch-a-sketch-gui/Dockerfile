@@ -13,8 +13,11 @@ RUN npm install
 # Copy the rest of the app's source code
 COPY . .
 
-# Build the app
-RUN npm run build
+# Accept build arguments for VITE_API_URL
+ARG VITE_API_URL
+
+# Use the build argument in the Vite build
+RUN VITE_API_URL=$VITE_API_URL npm run build
 
 # Stage 2: Serve the React app using a lightweight web server
 FROM nginx:alpine
