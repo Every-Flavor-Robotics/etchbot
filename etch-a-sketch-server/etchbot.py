@@ -264,7 +264,7 @@ class EtchBot:
         # - The queue is not empty
         # - The robot is not paused
         # - The screen is erased
-        return len(self.queue) > 0 and not self.paused and self.is_screen_erased()
+        return len(self.queue) > 0 and len(self.queue[0]) > 0 and not self.paused and self.is_screen_erased()
 
     def gcode_ready(self) -> bool:
         # Return true if we are in drawing state AND the queue is not empty
@@ -341,7 +341,7 @@ class EtchBot:
         self.cooldown_start = time.time()
         drawing_time = event.kwargs.get("drawing_time", 30)
 
-        self.cooldown_time = drawing_time * 0.75
+        self.cooldown_time = drawing_time * 1.0
 
         # Check if the robot is recording
         if self.is_recording():
@@ -353,7 +353,7 @@ class EtchBot:
                 output_dir = self.next_drawing().get_artifiact_dir()
 
             if output_dir is not None:
-                self.camera.get_frame(output_dir, name)
+                self.camera.stop_video_recording(output_dir, name + "_video")
             else:
                 print("Output directory is None. Video will be lost.")
                 self.camera.stop_video_recording()
@@ -434,6 +434,10 @@ class EtchBot:
         print(f"{self.name} has encountered an error.")
         # Stop the watchdog thread
         self.watchdog_active = False
+
+        if(self.camera is not None and self.is_recording()):
+            # Stop recording, throw away the video
+            self.camera.stop_video_recording()
 
     def on_exit_ERROR(self, event):
         print(f"{self.name} is recovering from an error.")
