@@ -79,9 +79,11 @@ class HTTPCamera:
         except requests.exceptions.ConnectionError:
             return None
 
+        save_path = None
         if response.status_code == 200:
             video_file_path = f"{name}.mp4"
-            with open(video_file_path, "wb") as file:
+            save_path = save_dir / video_file_path
+            with open(save_path, "wb") as file:
                 for chunk in response.iter_content(chunk_size=1024):
                     if chunk:
                         file.write(chunk)
