@@ -315,6 +315,10 @@ class EtchBot:
         # Reset the GCode at the beginning of the queue
         self.next_gcode().reset()
 
+        # Start recording if enabled
+        if self.record_while_drawing and self.camera is not None:
+            self.camera.start_video_recording()
+
         # We need to send the GCode to the GCode server to queue it up
         # We are not expecting an immediate response during drawing phase
         self.watchdog_timeout_seconds = self.watchdog_timeout_seconds_DRAWING
@@ -338,6 +342,21 @@ class EtchBot:
         drawing_time = event.kwargs.get("drawing_time", 30)
 
         self.cooldown_time = drawing_time * 0.75
+
+        # Check if the robot is recording
+        if self.is_recording():
+            output_dir = None
+            name = None
+
+            if len(self.queue) > 0:
+                name = self.next_gcode().get_name()
+                output_dir = self.next_drawing().get_artifiact_dir()
+
+            if output_dir is not None:
+                self.camera.get_frame(output_dir, name)
+            else:
+                print("Output directory is None. Video will be lost.")
+                self.camera.stop_video_recording()
 
         # Check if there is a camera connected
         if self.picture_thread is not None:
@@ -444,6 +463,12 @@ class EtchBot:
 
     def disable_recording(self):
         self.record_while_drawing = False
+
+    def is_recording(self):
+        if self.camera is not None:
+            return self.camera.is_recording
+
+        return False
 
 
 class EtchBotStore:

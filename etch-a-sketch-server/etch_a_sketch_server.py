@@ -129,7 +129,7 @@ def get_etchbot_status(etchbot_name):
             "current_drawing": drawing,
             "camera_connected": etchbot.camera is not None,
             "camera_recording": (
-                etchbot.camera.is_recording if etchbot.camera else False
+                etchbot.is_recording()
             ),
             "recording_mode": etchbot.record_while_drawing,
             "paused": etchbot.paused,
