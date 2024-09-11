@@ -49,9 +49,9 @@ class HTTPCamera:
         return save_path
 
     def start_video_recording(self):
-        # Send a GET request to /start_video_recording/<int:cam_id> and return the response
+        # Send a POST request to /start_video_recording/<int:cam_id> and return the response
         try:
-            response = requests.get(
+            response = requests.post(
                 f"{self.url}/start_video_recording/{self.camera_index}"
             )
         except requests.exceptions.ConnectionError:
@@ -71,9 +71,9 @@ class HTTPCamera:
 
 
 
-        # Send a GET request to /stop_video_recording/<int:cam_id> and return the response
+        # Send a POST request to /stop_video_recording/<int:cam_id> and return the response
         try:
-            response = requests.get(
+            response = requests.post(
                 f"{self.url}/stop_video_recording/{self.camera_index}"
             )
         except requests.exceptions.ConnectionError:
