@@ -69,6 +69,8 @@ class HTTPCamera:
 
         self.is_recording = False
 
+
+
         # Send a GET request to /stop_video_recording/<int:cam_id> and return the response
         try:
             response = requests.get(
@@ -77,12 +79,11 @@ class HTTPCamera:
         except requests.exceptions.ConnectionError:
             return None
 
-        # Get file extension from the response headers
-        extension = response.headers["Content-Type"].split("/")[-1]
-
-        # Save the response content to a file in the save_dir
-        save_path = save_dir / f"{name}.{extension}"
-        with open(save_path, "wb") as file:
-            file.write(response.content)
+        if response.status_code == 200:
+            video_file_path = f"{name}.mp4"
+            with open(video_file_path, "wb") as file:
+                for chunk in response.iter_content(chunk_size=1024):
+                    if chunk:
+                        file.write(chunk)
 
         return save_path
