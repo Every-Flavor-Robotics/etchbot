@@ -1,7 +1,5 @@
 # Etchbot V2
 
-This repo hosts all of the code for Etchbot V2 and Etchbot Stepper.
-
 ## Links
 
 [Join our Discord!](https://discord.gg/exDWKb4kwd)
@@ -24,7 +22,7 @@ The software for the Etchbot is split into multiple parts:
 
 ## Setting up the Etchbot Stepper
 ### Hardware
-All of the CAD files for the Etchbot Stepper can be found at this Printables link.
+All of the CAD files for the Etchbot Stepper can be found at [this Printables link](https://www.printables.com/model/1011848-nema-17-cnc-etch-a-sketch).
 
 ### Software
 
