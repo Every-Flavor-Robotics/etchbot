@@ -31,6 +31,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --de
 
 # Copy the source code into the container
 COPY . /app
+COPY ../etchbot_config.yml /app/etchbot_config.yml
 RUN rm -rf /app/pipeline_output && mkdir /app/pipeline_output
 WORKDIR /app
 
@@ -47,4 +48,4 @@ ENV PATH="/app/modules/svg2gcode/target/release:${PATH}"
 RUN python3 etch_a_sketch_cli.py -i examples/hot_dog.png -o hot_dog --copy
 
 # Set the default command to run when the container starts
-CMD ["python", "etch_a_sketch_server.py"]
+CMD ["python", "etch_a_sketch_server.py --config etchbot_config.yml"]
