@@ -1,6 +1,7 @@
 from genericpath import exists
 import numpy as np
 import os
+from config import Config
 
 os.environ["MKL_THREADING_LAYER"] = "INTEL"
 os.environ["MKL_SERVICE_FORCE_INTEL"] = "1"
@@ -33,6 +34,7 @@ from gcode_filters import (
 )
 
 counter = 0
+config = Config()
 
 
 def copy_files(source, destination):
@@ -90,7 +92,9 @@ def run_pipeline(
         BlackAndWhitePreprocessor(),
     ]
     vectorizers = [PotraceVectorizer()]
-    gcode_converters = [Svg2GcodeGenerator()]
+    gcode_converters = [Svg2GcodeGenerator(feed_rate=config.get("drawing.feed_rate", None),
+                output_width=config.get("drawing.width", None),
+                output_height=config.get("drawing.height", None))]
     gcode_filters = [
         GCodeCleaner(),
         RemoveZ(),

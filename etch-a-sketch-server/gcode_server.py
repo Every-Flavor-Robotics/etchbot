@@ -12,9 +12,11 @@ from etch_a_sketch_cli import run_pipeline
 from pathlib import Path
 import shutil
 from etchbot import EtchBotStore
+from config import Config
 
 
 etchbot_store = EtchBotStore()
+config = Config()
 
 SUPPORTED_IMAGE_TYPES = [".jpg", ".jpeg", ".png", ".svg"]
 SUPPORTED_VIDEO_TYPES = [".mp4", ".avi", ".mov"]
@@ -35,6 +37,20 @@ PROCESSING_DIR = Path("processing")
 def extract_number(filename: str):
     match = re.search(r"\d+", filename)
     return int(match.group()) if match else float("inf")
+
+
+def extract_gcode_coords(line):
+    coords = [None, None, None]
+    if line.startswith('G1') or line.startswith('G0') or line.startswith('G00') or line.startswith('G01'):
+        x_match = re.search(r'X(-?\d+(\.\d+)?)', line)
+        y_match = re.search(r'Y(-?\d+(\.\d+)?)', line)
+        z_match = re.search(r'Z(-?\d+(\.\d+)?)', line)
+        coords[0] = float(x_match.group(1)) if x_match else None
+        coords[1] = float(y_match.group(1)) if y_match else None
+        coords[2] = float(z_match.group(1)) if z_match else None
+
+    return coords
+
 
 
 class GCode:
@@ -59,6 +75,17 @@ class GCode:
     def load(self):
         with open(self.gcode_file) as f:
             self.gcode_lines = f.readlines()
+
+            # Get coords of the last line
+            last_line = self.gcode_lines[-1]
+            last_coords = extract_gcode_coords(last_line)
+            # Remove it if it's returning to home (0,0)
+            if last_coords[0] == 0 and last_coords[1] == 0:
+                self.gcode_lines.pop()
+
+            zero_point = config.get("drawing.zero", 0.0)
+
+            self.gcode_lines.append(f"G0 X{zero_point} Y{zero_point}\n")
             self.gcode_lines.append("G28\n")
             self.gcode_lines.append("END\n")
 

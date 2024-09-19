@@ -14,6 +14,8 @@ from gcode_server import (
 )
 from etchbot import EtchBot, EtchBotStore
 from http_camera import HTTPCamera
+from config import Config
+
 
 UPLOAD_DIR = Path("uploads")
 PROCESSING_DIR = Path("processing")
@@ -616,7 +618,16 @@ def update_state():
         return jsonify({f"error": "Unknown error during update - {e}"}), 500
 
 
-if __name__ == "__main__":
+@click.command()
+@click.option(
+    "--config",
+    default="../etchbot_config.yml",
+    help="Path to the YAML configuration file.",
+)
+def main(config):
+
+    config = Config(config)
+
     # Confirm that the necessary directories exist
     if not UPLOAD_DIR.exists():
         UPLOAD_DIR.mkdir()
@@ -629,8 +640,13 @@ if __name__ == "__main__":
 
     run_gcode_server(OUTPUT_DIR, run_flask=False)
 
+    print(f"Using configuration file: {config}")
+
     print("Registered Endpoints:")
     for rule in app.url_map.iter_rules():
         print(f"{rule.endpoint}: {rule.rule}")
 
     app.run("0.0.0.0", port=5010, use_reloader=False, debug=False)
+
+if __name__ == "__main__":
+    main()
