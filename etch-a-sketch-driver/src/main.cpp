@@ -9,10 +9,9 @@ String name = "Claude-Monetch";
 
 unsigned long start_time = 0;
 
-String server_address = "http://192.168.10.15";
-int server_port = 5010;
-
 HTTPClient http;
+
+String host = "http://" + String(HOST) + ":" + String(PORT);
 
 enum COMMAND
 {
@@ -27,6 +26,8 @@ bool (*loop_function)() = NULL;
 COMMAND command = WAIT;
 void setup()
 {
+  // HOST and PORT are env variables, create address string
+
   // Configure onboard button as input
   pinMode(0, INPUT_PULLUP);
 
@@ -36,7 +37,7 @@ void setup()
   draw_pre_setup();
 
   int return_code = 0;
-  String address = server_address + ":" + server_port + "/connect";
+  String address = host + "/connect";
   String body = "{\"name\": \"" + name + "\", \"ip\": \" " +
                 WiFi.localIP().toString() + "\"}";
 
@@ -56,7 +57,7 @@ void setup()
 
   while (command == WAIT)
   {
-    address = server_address + ":" + server_port + "/command" + "?name=" + name;
+    address = host + "/command" + "?name=" + name;
     http.begin(address.c_str());
     http.addHeader("Content-Type", "application/json");
     //   call GET and retrieve JSON response
@@ -89,6 +90,13 @@ void setup()
         command = WAIT;
       }
     }
+    else if (return_code == 404)
+    {
+      // Server probably rebooted, restart ESP and try again
+      Serial.println("Server rebooted, restarting ESP");
+      delay(2000);
+      esp_restart();
+    }
 
     http.end();
 
@@ -117,7 +125,7 @@ void loop()
     float completion_time_seconds = completion_time / 1000000.0;
 
     // We are complete now, send a complete message to the server
-    String address = server_address + ":" + server_port;
+    String address = host;
     String body;
 
     if (command == DRAW)

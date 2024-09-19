@@ -20,29 +20,26 @@
 #include "wifi_gcode_stream.h"
 
 //  Conversion from mm to radians
-// #define GEAR_RATIO 30.0 / 66.0  // Motor to knob
-#define GEAR_RATIO (18.0f / 81.0f)  // Motor to knob
-#define RAD_PER_MM (0.1858f / GEAR_RATIO)
+// #define GEAR_RATIO (18.0f / 81.0f)  // Motor to knob
+#define RAD_PER_MM (MM_TO_KNOB_RAD / GEAR_RATIO)
 #define MMPERMIN_TO_RADPERSEC (RAD_PER_MM / 60.0)
-#define ACCELERATION 15000
-#define BACKLASH_ACCELERATION 8000
-#define MAX_ACCELERATION 25000
-#define UP_DOWN_BACKLASH_RAD (2.6 * RAD_PER_MM)
-#define LEFT_RIGHT_BACKLASH_RAD (2.0 * RAD_PER_MM)
-#define BACKLASH_COMEPSENATION_RADPERSEC 100.0f
+// #define ACCELERATION 15000
+// #define BACKLASH_ACCELERATION 8000
+// #define MAX_ACCELERATION 25000
+// #define UP_DOWN_BACKLASH_RAD (2.6 * RAD_PER_MM)
+// #define LEFT_RIGHT_BACKLASH_RAD (2.0 * RAD_PER_MM)
+#define UP_DOWN_BACKLASH_RAD (UP_DOWN_BACKLASH_MM * RAD_PER_MM)
+#define LEFT_RIGHT_BACKLASH_RAD (LEFT_RIGHT_BACKLASH_MM * RAD_PER_MM)
+// #define BACKLASH_COMEPSENATION_RADPERSEC BACKLASH_COMPENSATION_SPEED
 // mm * RAD_PER_MM = rad
-#define ERROR_TOLERANCE (0.8 * RAD_PER_MM)
-#define OL_THRESHOLD (0.2f * RAD_PER_MM)
+#define ERROR_TOLERANCE (ERROR_TOLERANCE_MM * RAD_PER_MM)
 #define sign(x) ((x) < -0.0001 ? -1 : ((x) > 0.0001 ? 1 : 0))
 #define ENABLED
 
-// Rad/s
-// #define OL_VELOCITY_LIMIT 15
-float OL_VELOCITY_LIMIT = 0;
-size_t replan_horizon = 1;
-
 #define X_LIM 130
 #define Y_LIM 89.375
+
+size_t replan_horizon = 1;
 
 TaskHandle_t loop_foc_task;
 TickType_t xLastWakeTime;
@@ -239,7 +236,7 @@ void draw_pre_setup()
         up_down_gain_multiplier = planner_lpf_params.p;
         left_right_gain_multiplier = planner_lpf_params.i;
 
-        OL_VELOCITY_LIMIT = planner_lpf_params.d;
+        // OL_VELOCITY_LIMIT = planner_lpf_params.d;
         //    replan_horizon = planner_lpf_params.i;
         //    FEEDRATE = planner_lpf_params.d;
       });
@@ -259,7 +256,7 @@ void draw_pre_setup()
 
 void draw_setup()
 {
-  stream = new GCode::WifiGCodeStream("192.168.10.15", 50);
+  stream = new GCode::WifiGCodeStream(HOST, 50);
   parser = new GCode::GCodeParser(stream, 2000);
 
   GCode::start_parser(*parser);
@@ -493,7 +490,7 @@ bool draw_loop()
     profile.left_right_backlash_distance = LEFT_RIGHT_BACKLASH_RAD;
     profile.up_down_backlash_distance = UP_DOWN_BACKLASH_RAD;
 
-    profile.v_target_backlash = BACKLASH_COMEPSENATION_RADPERSEC;
+    profile.v_target_backlash = BACKLASH_COMPENSATION_RADPERSEC;
     profile.a_target_backlash = BACKLASH_ACCELERATION;
 
     profile.left_right_direction_previous = left_right_previous_direction;
