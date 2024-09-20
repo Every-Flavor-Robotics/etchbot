@@ -23,7 +23,7 @@ class Svg2GcodeGenerator(GCodeGenerator):
     https://github.com/sameer/svg2gcode.git
     """
 
-    SVG2GCODE_PATH = "svg2gcode"
+    SVG2GCODE_PATH = "./modules/svg2gcode/Cargo.toml"
     PARALLELIZABLE = True
 
     def __init__(

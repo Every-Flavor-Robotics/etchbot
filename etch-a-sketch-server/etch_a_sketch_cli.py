@@ -34,7 +34,6 @@ from gcode_filters import (
 )
 
 counter = 0
-config = Config()
 
 
 def copy_files(source, destination):
@@ -92,9 +91,9 @@ def run_pipeline(
         BlackAndWhitePreprocessor(),
     ]
     vectorizers = [PotraceVectorizer()]
-    gcode_converters = [Svg2GcodeGenerator(feed_rate=config.get("drawing.feed_rate", None),
-                output_width=config.get("drawing.width", None),
-                output_height=config.get("drawing.height", None))]
+    gcode_converters = [Svg2GcodeGenerator(feed_rate=Config().get("drawing.feed_rate", None),
+                output_width=Config().get("drawing.width", None),
+                output_height=Config().get("drawing.height", None))]
     gcode_filters = [
         GCodeCleaner(),
         RemoveZ(),
