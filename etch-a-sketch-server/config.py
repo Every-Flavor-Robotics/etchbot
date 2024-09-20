@@ -1,14 +1,3 @@
-"""
-config.py
-
-This module defines a singleton Config class that loads configuration data from a YAML file.
-It ensures that only one instance of the configuration is created and provides thread-safe access to the configuration data.
-
-Usage example:
-    config = Config('/path/to/config.yaml')
-    value = config.get('some_key', 'default_value')
-"""
-
 import yaml
 from threading import Lock
 
@@ -19,19 +8,26 @@ class Config:
     _instance = None
     _lock = Lock()
 
-    def __new__(cls, yaml_file):
+    def __new__(cls, yaml_file=None):
         """
         Create a new instance of Config if it doesn't exist, otherwise return the existing instance.
         This method is thread-safe.
 
-        :param yaml_file: Path to the YAML configuration file.
+        :param yaml_file: (Optional) Path to the YAML configuration file.
         :return: Singleton instance of Config.
         """
         with cls._lock:
             if cls._instance is None:
+                if yaml_file is None:
+                    raise ValueError("First initialization requires a yaml_file path.")
                 cls._instance = super(Config, cls).__new__(cls)
                 cls._instance._initialize(yaml_file)
-        return cls._instance
+            else:
+                if yaml_file is not None and yaml_file != cls._instance.yaml_file:
+                    raise ValueError(
+                        f"Config is already initialized with a different yaml_file: {cls._instance.yaml_file}"
+                    )
+            return cls._instance
 
     def _initialize(self, yaml_file):
         """
@@ -39,6 +35,7 @@ class Config:
 
         :param yaml_file: Path to the YAML configuration file.
         """
+        self.yaml_file = yaml_file  # Store the yaml_file path
         with open(yaml_file, 'r') as file:
             self._config = yaml.safe_load(file)
 
