@@ -258,7 +258,7 @@ def run_pipeline(
     "--config",
     help="Path to the configuration file",
     type=click.Path(exists=True, path_type=pathlib.Path),
-    default="../etchbot_config.yaml",
+    default="../etchbot_config.yml",
 )
 def main(
     input_file: pathlib.Path,
@@ -267,7 +267,7 @@ def main(
     skip_preprocessing: bool,
     config: pathlib.Path,
 ):
-    Config(input_file)
+    Config(config)
     run_pipeline(input_file, "pipeline_output" / output_dir, copy, skip_preprocessing)
 
 

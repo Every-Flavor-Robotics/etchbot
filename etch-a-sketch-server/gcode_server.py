@@ -16,7 +16,6 @@ from config import Config
 
 
 etchbot_store = EtchBotStore()
-config = Config()
 
 SUPPORTED_IMAGE_TYPES = [".jpg", ".jpeg", ".png", ".svg"]
 SUPPORTED_VIDEO_TYPES = [".mp4", ".avi", ".mov"]
@@ -83,7 +82,7 @@ class GCode:
             if last_coords[0] == 0 and last_coords[1] == 0:
                 self.gcode_lines.pop()
 
-            zero_point = config.get("drawing.zero", 0.0)
+            zero_point = Config().get("drawing.zero", 0.0)
 
             self.gcode_lines.append(f"G0 X{zero_point} Y{zero_point}\n")
             self.gcode_lines.append("G28\n")
