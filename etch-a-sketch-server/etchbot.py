@@ -340,7 +340,7 @@ class EtchBot:
         self.watchdog_active = False
 
         # Clear the command
-        self.command = ""
+        self.command = None
 
         # Start cooldown timer
         self.cooldown_start = time.time()
@@ -439,6 +439,7 @@ class EtchBot:
         print(f"{self.name} has encountered an error.")
         # Stop the watchdog thread
         self.watchdog_active = False
+        self.command = None
 
         if(self.camera is not None and self.is_recording()):
             # Stop recording, throw away the video
