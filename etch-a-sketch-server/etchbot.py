@@ -181,14 +181,19 @@ class EtchBot:
     def handle_connect_request(self):
         if self.may_connect():
             self.connect()
+        else:
+            print(
+                f"Cannot connect to {self.name}. Robot is not in the correct state, error."
+            )
+            self.error()
+
+        if self.state == "READY":
             return True
 
-        print(
-            f"Cannot connect to {self.name}. Robot is not in the correct state, error."
-        )
-        self.error()
-
         return False
+
+
+
 
     def get_command(self):
         # Log the current time as the last heartbeat
