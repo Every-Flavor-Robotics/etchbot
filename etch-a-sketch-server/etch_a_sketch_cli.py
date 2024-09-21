@@ -31,6 +31,7 @@ from gcode_filters import (
     TSPOptimizer,
     GCodeCleaner,
     RemoveZ,
+    ZeroShifter
 )
 
 counter = 0
@@ -100,6 +101,7 @@ def run_pipeline(
         ResolutionReducer(1.2),
         ColinearFilter(0.996),
         TSPOptimizer(),
+        ZeroShifter((Config.get("drawing.zero", 0.0), Config.get("drawing.zero", 0.0))),
     ]
 
     # Confirm that the input file exists

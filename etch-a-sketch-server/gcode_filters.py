@@ -411,3 +411,63 @@ class TSPOptimizer(GCodeFilter):
         subprocess.run(command, shell=True)
 
         return output_path
+
+
+class ZeroShifter(GCodeFilter):
+    """ZeroShifter shifts the GCode to end at a different origin.
+
+    """
+
+    PARALLELIZABLE = True
+
+    def __init__(self, new_origin: tuple[float, float] = (0, 0)):
+        """Initialize the ZeroShifter with the new origin.
+
+        Args:
+            new_origin (tuple): New origin point (x, y) in mm
+        """
+        super().__init__()
+
+        self.new_origin = new_origin
+
+    def _process(self, input_path: Path, output_path: Path) -> Path:
+        """Process the input gcode file and return the output gcode file with all (0,0) commands going to the new origin.
+
+        Args:
+            input_path (Path): Path to the GCode file to be processed
+            output_path (Path): Path to save the processed GCode file
+
+        Returns:
+        """
+
+        super()._process(input_path, output_path)
+
+        with open(input_path, "r") as f:
+            lines = f.readlines()
+
+        count = 0
+        new_lines = []
+        for line in lines:
+            command, args = self.decode_line(line)
+
+            # Check if the command is going to the origin
+            if "X" in args and "Y" in args:
+                x = args["X"]
+                y = args["Y"]
+
+                if x == 0 and y == 0:
+                    x = self.new_origin[0]
+                    y = self.new_origin[1]
+                    count += 1
+
+                new_line = f"{command} X{x} Y{y}\n"
+                new_lines.append(new_line)
+            else:
+                new_lines.append(line)
+
+        with open(output_path, "w") as f:
+            f.writelines(new_lines)
+
+        print(f"Shifted {count} points to the new origin {self.new_origin}.")
+
+        return output_path
