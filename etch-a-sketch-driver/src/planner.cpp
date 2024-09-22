@@ -211,6 +211,33 @@ Planner::generate_backlash_compensated_profile(
   // Create a new trajectory profile to output
   Planner::BacklashCompensatedTrajectory compensated_profile;
 
+  //   //   Print all the args
+  //   Serial.println("-------------- In planner -----------------");
+  //   Serial.println("Backlash compensation: " +
+  //                  String(args.backlash_compensation_enabled));
+  //   Serial.println("Initial position: (" + String(args.x_current, 5) + ", " +
+  //                  String(args.y_current, 5) + ")");
+  //   Serial.println("Final position: (" + String(args.main_profile.x_final, 5)
+  //   +
+  //                  ", " + String(args.main_profile.y_final, 5) + ")");
+  //   Serial.println("Initial velocity: " + String(args.v_current, 5) +
+  //   "mm/s"); Serial.println("Target velocity: " +
+  //   String(args.v_target_backlash, 5) +
+  //                  "mm/s");
+  //   Serial.println("Final velocity: " + String(args.main_profile.v_initial,
+  //   5) +
+  //                  "mm/s");
+  //   Serial.println("Acceleration: " + String(args.a_target_backlash, 5) +
+  //                  "mm/s^2");
+  //   Serial.println("End delay: " + String(args.main_profile.end_delay_us) +
+  //   "us"); Serial.println("Backlash compensation distance: " +
+  //                  String(args.left_right_backlash_distance) + ", " +
+  //                  String(args.up_down_backlash_distance));
+  //   Serial.println("Backlash compensation offset: " +
+  //                  String(args.left_right_backlash_offset) + ", " +
+  //                  String(args.up_down_backlash_offset));
+  //   Serial.println("-------------- In planner -----------------");
+
   // Calculate the distance between the initial and final points
   float dx = args.main_profile.x_final - args.x_current;
   float dy = args.main_profile.y_final - args.y_current;
@@ -297,8 +324,10 @@ Planner::generate_backlash_compensated_profile(
     }
 
     backlash_compensation_args.end_delay_us = 0;
+    // Serial.println("---------Backlash--------");
 
     // Serial.println("Backlash compensation args:");
+    // Serial.println("tolerance: " + String(error_tolerance, 5));
     // Serial.println("x_initial: " +
     //                String(backlash_compensation_args.x_initial));
     // Serial.println("y_initial: " +
@@ -307,10 +336,30 @@ Planner::generate_backlash_compensated_profile(
     // Serial.println("y_final: " + String(backlash_compensation_args.y_final));
     // Serial.println("end_delay_us: " +
     //                String(backlash_compensation_args.end_delay_us));
+    // Serial.println("-----------------");
 
     // Compute the backlash compensation profile
     compensated_profile.backlash_compensation_profile =
         generate_trapezoid_profile(backlash_compensation_args, error_tolerance);
+
+    // Serial.println("Backlash compensation profile:");
+    // Serial.println("Acceleration time: " +
+    //                String(compensated_profile.backlash_compensation_profile
+    //                           .acceleration_time_delta_us) +
+    //                "us");
+    // Serial.println("Coast end time: " +
+    //                String(compensated_profile.backlash_compensation_profile
+    //                           .coast_end_time_delta_us) +
+    //                "us");
+    // Serial.println("End time: " +
+    //                String(compensated_profile.backlash_compensation_profile
+    //                           .end_time_delta_us) +
+    //                "us");
+    // Serial.println("End delay time: " +
+    //                String(compensated_profile.backlash_compensation_profile
+    //                           .end_delay_delta_us) +
+    //                "us");
+    // Serial.println("-----------------");
   }
 
   // Now compute the main profile
@@ -327,8 +376,39 @@ Planner::generate_backlash_compensated_profile(
 
   args.main_profile.end_delay_us = 0;
 
+  //   Serial.println("---------Main--------");
+  //   Serial.println("Main profile args:");
+  //   Serial.println("x_initial: " + String(args.main_profile.x_initial));
+  //   Serial.println("y_initial: " + String(args.main_profile.y_initial));
+  //   Serial.println("x_final: " + String(args.main_profile.x_final));
+  //   Serial.println("y_final: " + String(args.main_profile.y_final));
+  //   Serial.println("v_initial: " + String(args.main_profile.v_initial));
+  //   Serial.println("v_target: " + String(args.main_profile.v_target));
+  //   Serial.println("v_final: " + String(args.main_profile.v_final));
+  //   Serial.println("a_target: " + String(args.main_profile.a_target));
+  //   Serial.println("end_delay_us: " +
+  //   String(args.main_profile.end_delay_us));
+  //   Serial.println("-----------------");
+
   compensated_profile.profile =
       generate_trapezoid_profile(args.main_profile, error_tolerance);
+
+  //   Serial.println("Main profile:");
+  //   Serial.println(
+  //       "Acceleration time: " +
+  //       String(compensated_profile.profile.acceleration_time_delta_us) +
+  //       "us");
+  //   Serial.println("Coast end time: " +
+  //                  String(compensated_profile.profile.coast_end_time_delta_us)
+  //                  + "us");
+  //   Serial.println("End time: " +
+  //                  String(compensated_profile.profile.end_time_delta_us) +
+  //                  "us");
+  //   Serial.println("End delay time: " +
+  //                  String(compensated_profile.profile.end_delay_delta_us) +
+  //                  "us");
+
+  //   Serial.println("---------Main Close--------");
 
   //   Add the backlash compensation time to the main profile
   compensated_profile.profile.acceleration_time_delta_us +=
