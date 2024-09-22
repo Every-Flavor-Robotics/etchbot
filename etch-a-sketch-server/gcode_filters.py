@@ -460,7 +460,13 @@ class ZeroShifter(GCodeFilter):
                     y = self.new_origin[1]
                     count += 1
 
-                new_line = f"{command} X{x} Y{y}\n"
+                new_line = f"{command} X{x} Y{y}"
+                # Add all of the other arguments
+                for key, value in args.items():
+                    if key not in ["X", "Y"]:
+                        new_line += f" {key}{value}"
+                new_line += "\n"
+
                 new_lines.append(new_line)
             else:
                 new_lines.append(line)
