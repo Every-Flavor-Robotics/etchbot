@@ -262,7 +262,7 @@ class GCodeRequestHandler(socketserver.StreamRequestHandler):
 
         try:
             while not gcode.complete():
-                self.request.settimeout(5)
+                self.request.settimeout(30)
 
                 print("Waiting for data...")
                 data = self.request.recv(1024).strip().decode()
