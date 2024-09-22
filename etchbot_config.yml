@@ -11,8 +11,8 @@ server:
 drawing:
   width: 130
   height: 89.375
-  feed_rate: 12000
-  acceleration: 15000
+  feed_rate: 14000
+  acceleration: 16000
   # Zero position in mm
   zero: 2.8
 
@@ -23,7 +23,7 @@ robot:
   mm_to_knob_rad: 0.1858
   left_right_backlash_mm: 2.0
   up_down_backlash_mm: 2.6
-  backlash_compensation_radpersec: 100.0
-  backlash_acceleration: 8000
+  backlash_compensation_radpersec: 130.0
+  backlash_acceleration: 9000
   max_acceleration: 25000
   error_tolerance_mm: 0.8 # mm
