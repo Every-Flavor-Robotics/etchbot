@@ -109,6 +109,30 @@ GCode::GCodeParser* parser;
 GCode::WifiGCodeStream* stream;
 
 Planner::TrajectoryState state;
+float previous_position_x = 0;
+float previous_position_y = 0;
+float previous_velocity_x = 0;
+float previous_velocity_y = 0;
+unsigned long previous_loop_time = 0;
+bool first = true;
+bool complete = false;
+
+Planner::BacklashCompensatedTrajectoryParameters profile;
+
+Planner::BacklashCompensatedTrajectory cur_trajectory;
+Planner::Direction left_right_previous_direction = Planner::Direction::BACKWARD;
+Planner::Direction up_down_previous_direction = Planner::Direction::BACKWARD;
+float left_right_backlash_offset = 0;
+float up_down_backlash_offset = 0;
+
+GCode::MotionCommand command1;
+GCode::MotionCommand command2;
+
+// Add pointers to the current and next command
+GCode::MotionCommand* current_command = &command1;
+bool next_command_ready = false;
+GCode::MotionCommand* next_command = &command2;
+GCode::MotionCommand* temp_command;
 
 void freq_println(String str, int freq)
 {
@@ -166,7 +190,7 @@ void draw_pre_setup()
   left_right_velocity_pid_params.i = 0.0;
   left_right_velocity_pid_params.d = 0.0;
   left_right_velocity_pid_params.lpf_time_constant = 0.00;
-  left_right_ff_accel_gain = 0.021 / 100;
+  left_right_ff_accel_gain = 0.023 / 100;
   left_right_ff_velocity_gain = 0.011;
 
   left_right_velocity_pid.P = left_right_velocity_pid_params.p;
@@ -178,7 +202,7 @@ void draw_pre_setup()
   up_down_velocity_pid_params.i = 0.0;
   up_down_velocity_pid_params.d = 0.0;
   up_down_velocity_pid_params.lpf_time_constant = 0.00;
-  up_down_ff_accel_gain = 0.021 / 100;
+  up_down_ff_accel_gain = 0.023 / 100;
   up_down_ff_velocity_gain = 0.011;
 
   up_down_velocity_pid.P = up_down_velocity_pid_params.p;
@@ -276,6 +300,18 @@ void draw_setup()
   //   up_down.zero_position();
   state.is_complete = true;
   delay(2000);
+
+  previous_position_x = left_right.get_position();
+  previous_position_y = up_down.get_position();
+
+  command1.x = previous_position_x;
+  command1.y = previous_position_y;
+
+  command2.x = previous_position_x;
+  command2.y = previous_position_y;
+
+  profile.main_profile.x_final = previous_position_x;
+  profile.main_profile.y_final = previous_position_y;
 }
 
 float target = 0.0;
@@ -369,35 +405,6 @@ void loop_foc(void* pvParameters)
   }
 }
 
-Planner::BacklashCompensatedTrajectoryParameters profile;
-
-Planner::BacklashCompensatedTrajectory cur_trajectory;
-Planner::Direction left_right_previous_direction = Planner::Direction::BACKWARD;
-Planner::Direction up_down_previous_direction = Planner::Direction::BACKWARD;
-float left_right_backlash_offset = 0;
-float up_down_backlash_offset = 0;
-
-GCode::MotionCommand command1;
-GCode::MotionCommand command2;
-
-// Add pointers to the current and next command
-GCode::MotionCommand* current_command = &command1;
-bool next_command_ready = false;
-GCode::MotionCommand* next_command = &command2;
-GCode::MotionCommand* temp_command;
-
-float previous_position_x = 0;
-float previous_position_y = 0;
-float previous_velocity_x = 0;
-float previous_velocity_y = 0;
-unsigned long previous_loop_time = 0;
-
-unsigned long last_loop_time = 0;
-bool first = true;
-
-int parser_test = 0;
-
-bool complete = false;
 bool draw_loop()
 {
   // Safety conditions
@@ -418,10 +425,6 @@ bool draw_loop()
     next_command = temp_command;
     next_command_ready = false;
 
-    // delay(1000);
-
-    float rad = left_right.get_position();
-
     profile.main_profile.x_initial =
         left_right.get_position() - left_right_backlash_offset;
     profile.main_profile.y_initial =
@@ -440,8 +443,8 @@ bool draw_loop()
     profile.main_profile.a_target = ACCELERATION;
 
     // Print final position in rad and mm
-    // Serial.println("Final position: " + String(rad, 5) + "rad, " +
-    //                String(mm, 5));
+    // Serial.println("Final position: " + String(current_command->x) + ", " +
+    //                String(current_command->y) + " mm");
 
     // Serial.println("Getting next command!");
 
@@ -473,9 +476,19 @@ bool draw_loop()
   //   Update position based on current velocity
   //   Generate a new profile
   //   Wait for the backlash compensation phase to finish before replanning
-  if (foc_loops.load() >= replan_horizon && !state.backlash_compensation_phase)
+  if (foc_loops.load() >= replan_horizon)
   {
     unsigned long trajectory_start_time = micros();
+
+    // Print positions and backlash offsets
+    // Serial.println("Left Right: " + String(left_right.get_position()));
+    // Serial.println("Up Down: " + String(up_down.get_position()));
+    // Serial.println("Left Right Backlash Offset: " +
+    //                String(left_right_backlash_offset));
+    // Serial.println("Up Down Backlash Offset: " +
+    //                String(up_down_backlash_offset));
+
+    // delay(10000);
 
     profile.x_current = left_right.get_position() - left_right_backlash_offset;
     profile.y_current = up_down.get_position() - up_down_backlash_offset;
@@ -578,6 +591,16 @@ bool draw_loop()
 
   previous_position_x = cur_position_x;
   previous_position_y = cur_position_y;
+
+  //   //   Print position, target position, and target speed
+  //   String str = "Position: " + String(cur_position_x) + ", " +
+  //                String(cur_position_y) +
+  //                " Target: " + String(profile.main_profile.x_final) + ", " +
+  //                String(profile.main_profile.y_final) +
+  //                " Current Command: " + String(current_command->x) + ", " +
+  //                String(current_command->y) +
+
+  //                " Speed: " + String(speed);
 
   if (!next_command_ready && parser->is_available())
   {
