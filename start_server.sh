@@ -2,4 +2,4 @@
 
 export HOST_IP=$(hostname -I | awk '{print $1}')
 
-docker-compose up --build -d
+docker-compose up --build  -d --remove-orphans

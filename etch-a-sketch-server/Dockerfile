@@ -41,7 +41,7 @@ RUN ./install.sh
 ENV PATH="/app/modules/svg2gcode/target/release:${PATH}"
 
 # Run example picture with CLI to ensure models are downloaded
-RUN python3 etch_a_sketch_cli.py -i examples/hot_dog.png -o hot_dog --copy
+RUN python3 etch_a_sketch_cli.py -i examples/hot_dog.png -o hot_dog --copy --config etchbot_config.yml
 
 # Set the default command to run when the container starts
 CMD ["python", "etch_a_sketch_server.py", "--config", "etchbot_config.yml"]
