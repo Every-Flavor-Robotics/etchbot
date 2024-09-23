@@ -94,14 +94,14 @@ def run_pipeline(
     vectorizers = [PotraceVectorizer()]
     gcode_converters = [Svg2GcodeGenerator(feed_rate=Config().get("drawing.feed_rate", None),
                 output_width=Config().get("drawing.width", None),
-                output_height=Config().get("drawing.height", None))]
+                output_height=Config().get("drawing.height", None),
+                origin=(Config().get("drawing.origin_x", 0.0), Config().get("drawing.origin_y", 0.0))),]
     gcode_filters = [
         GCodeCleaner(),
         RemoveZ(),
         ResolutionReducer(1.2),
         ColinearFilter(0.996),
         TSPOptimizer(),
-        ZeroShifter((Config().get("drawing.zero", 0.0), Config().get("drawing.zero", 0.0))),
     ]
 
     # Confirm that the input file exists

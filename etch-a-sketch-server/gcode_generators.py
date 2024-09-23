@@ -32,6 +32,7 @@ class Svg2GcodeGenerator(GCodeGenerator):
         output_width: float = 130,
         output_height=89.375,
         circular_interpolation: bool = False,
+        origin: tuple[float, float] = (0.0, 0.0),
     ):
         """Initialize the Svg2gcodeGenerator with the feed rate and seek rate.
 
@@ -47,6 +48,7 @@ class Svg2GcodeGenerator(GCodeGenerator):
         self.output_width = output_width
         self.output_height = output_height
         self.circular_interpolation = circular_interpolation
+        self.origin = origin
 
     def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input svg image and return the output GCode
@@ -65,7 +67,7 @@ class Svg2GcodeGenerator(GCodeGenerator):
         # Construct the command to convert the SVG to GCode
         command = f"{Svg2GcodeGenerator.SVG2GCODE_PATH} "
         # Add arguments
-        command += f"{input_path} --circular-interpolation {'true' if self.circular_interpolation else 'false'} -o {output_path} --dimensions {self.output_width}mm,{self.output_height}mm --feedrate {self.feed_rate} --origin 0,0"
+        command += f"{input_path} --circular-interpolation {'true' if self.circular_interpolation else 'false'} -o {output_path} --dimensions {self.output_width}mm,{self.output_height}mm --feedrate {self.feed_rate} --origin {self.origin[0]},{self.origin[1]}"
 
         # Run the command
         subprocess.run(command, shell=True)

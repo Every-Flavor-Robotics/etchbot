@@ -14,7 +14,8 @@ drawing:
   feed_rate: 14000
   acceleration: 16000
   # Zero position in mm
-  zero: 2.8
+  origin_x: 0.2
+  origin_y: 0.2
 
 robot:
   # 18:81
