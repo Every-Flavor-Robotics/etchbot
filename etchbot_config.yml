@@ -7,6 +7,9 @@ server:
   port: 5010
   stream_port: 5005
 
+video_generation:
+  frame_rate: 8
+
 # Drawing parameters
 drawing:
   width: 130

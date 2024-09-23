@@ -1,3 +1,4 @@
+import config
 import pathlib
 import socketserver
 import time
@@ -178,7 +179,7 @@ class Drawing:
 
         self.ready = True
 
-    def get_artifiact_dir(self):
+    def get_artifact_dir(self):
         return self.artifact_dir
 
     def _add_gcode_to_queue(self, output: pathlib.Path):
@@ -226,6 +227,34 @@ class Drawing:
         archive_path = shutil.make_archive(name, "zip", self.processing_dir)
 
         return Path(archive_path)
+
+    def generate_video(self):
+        # Get the artifact directory
+        artifact_dir = self.get_artifact_dir()
+
+        # Check to see how many pictures match the pattern rame_XXXX.png
+        frame_files = list(artifact_dir.glob("frame_*.png"))
+        # If more than 1 frame, generate a video
+        if len(frame_files) > 1:
+            # Use ffmpeg to generate a video
+            framerate = Config().get("video_generation.frame_rate", None)
+            input_file = artifact_dir / "frame_%04d.png"
+            output_file = artifact_dir / "output.mp4"
+            command = f"ffmpeg -framerate {framerate} -i {input_file} -c:v libx264 -crf 0 -pix_fmt yuv420p {output_file}"
+
+            process = subprocess.Popen(
+                command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+            )
+
+            print("Successfully generated video: ", output_file)
+        else:
+            print("Skipping video generation, not enough images")
+
+
+        if video_file is None:
+            return None
+
+        return video_file
 
     def __len__(self):
         return len(self.gcodes)

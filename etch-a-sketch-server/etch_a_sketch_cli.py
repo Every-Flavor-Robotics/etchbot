@@ -81,7 +81,7 @@ def run_pipeline(
         #     BlackAndWhitePreprocessor(),
         # ]
 
-    video_splitters = [FFmpegSplitter(4)]
+    video_splitters = [FFmpegSplitter(Config().get("video_generation.frame_rate", None))]
 
     preprocessors = [
         RemBGPreprocessor(),

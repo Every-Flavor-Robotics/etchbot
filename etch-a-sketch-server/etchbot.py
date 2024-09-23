@@ -155,7 +155,7 @@ class EtchBot:
             name = self.next_gcode().get_name()
 
             if len(self.queue) > 0:
-                output_dir = self.next_drawing().get_artifiact_dir()
+                output_dir = self.next_drawing().get_artifact_dir()
 
             if output_dir is not None:
                 self.camera.get_frame(output_dir, name)
@@ -355,7 +355,7 @@ class EtchBot:
 
             if len(self.queue) > 0:
                 name = self.next_gcode().get_name()
-                output_dir = self.next_drawing().get_artifiact_dir()
+                output_dir = self.next_drawing().get_artifact_dir()
 
             if output_dir is not None:
                 self.camera.stop_video_recording(output_dir, name + "_video")
@@ -394,7 +394,11 @@ class EtchBot:
         # Check if the drawing is complete
         if len(cur_drawing) == 0:
             # Drawing is complete, remove it from the queue and move it to the completed drawings
+            drawing = self.queue.pop(0)
+
+            drawing.generate_video()
             self.completed_drawings.append(self.queue.pop(0))
+
 
     def on_enter_ERASING(self, event):
         print(f"{self.name} is erasing.")
