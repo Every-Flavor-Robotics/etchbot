@@ -7,7 +7,6 @@ from datetime import datetime
 import threading
 import time
 import shutil
-from etch_a_sketch_cli import run_pipeline
 from gcode_server import (
     gcode_blueprint,
     run_gcode_server,
