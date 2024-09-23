@@ -388,9 +388,10 @@ class TSPOptimizer(GCodeFilter):
     OPTIMIZER_PATH = "./modules/gcode-optimizer/rust_optimizer.py"
     PARALLELIZABLE = True
 
-    def __init__(self):
+    def __init__(self, origin: tuple[float, float] = (0, 0)):
         """Initialize the TSPOptimizer."""
         super().__init__()
+        self.origin = origin
 
     def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input gcode file and return the output gcode file with the points optimized.
@@ -405,7 +406,7 @@ class TSPOptimizer(GCodeFilter):
         super()._process(input_path, output_path)
 
         # Construct the command to run the optimizer
-        command = f"python {self.OPTIMIZER_PATH} --input_file {input_path} --output_file {output_path}"
+        command = f"python {self.OPTIMIZER_PATH} --input_file {input_path} --output_file {output_path} --origin_x {self.origin[0]} --origin_y {self.origin[1]}"
 
         # Run the optimizer
         subprocess.run(command, shell=True)
