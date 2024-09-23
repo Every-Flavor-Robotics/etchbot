@@ -67,7 +67,7 @@ class Svg2GcodeGenerator(GCodeGenerator):
         # Construct the command to convert the SVG to GCode
         command = f"{Svg2GcodeGenerator.SVG2GCODE_PATH} "
         # Add arguments
-        command += f"{input_path} --circular-interpolation {'true' if self.circular_interpolation else 'false'} -o {output_path} --dimensions {self.output_width}mm,{self.output_height}mm --feedrate {self.feed_rate} --origin {self.origin[0]},{self.origin[1]}"
+        command += f"{input_path} --circular-interpolation {'true' if self.circular_interpolation else 'false'} -o {output_path} --dimensions {self.output_width}mm,{self.output_height}mm --feedrate {self.feed_rate} --origin {self.origin[0]}mm,{self.origin[1]}mm"
 
         # Run the command
         subprocess.run(command, shell=True)
