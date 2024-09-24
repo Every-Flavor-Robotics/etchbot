@@ -9,6 +9,7 @@ RUN apt update && apt install -y \
     pkg-config \
     libudev-dev \
     ffmpeg \
+    libx264-dev \
     libsm6 \
     libxext6 \
     libagg-dev \

@@ -233,7 +233,7 @@ class Drawing:
             framerate = Config().get("video_generation.frame_rate", None)
             input_file = artifact_dir / "frame_%04d.png"
             output_file = artifact_dir / "output.mp4"
-            command = f"ffmpeg -framerate {framerate} -i {input_file} -c:v libx264 -crf 0 -pix_fmt yuv420p {output_file}"
+            command = f"/usr/bin/ffmpeg -framerate {framerate} -i {input_file} -c:v libx264 -crf 0 -pix_fmt yuv420p {output_file}"
 
             process = subprocess.Popen(
                 command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
