@@ -192,9 +192,6 @@ class EtchBot:
 
         return False
 
-
-
-
     def get_command(self):
         # Log the current time as the last heartbeat
         self._update_heartbeat()
@@ -269,7 +266,12 @@ class EtchBot:
         # - The queue is not empty
         # - The robot is not paused
         # - The screen is erased
-        return len(self.queue) > 0 and len(self.queue[0]) > 0 and not self.paused and self.is_screen_erased()
+        return (
+            len(self.queue) > 0
+            and len(self.queue[0]) > 0
+            and not self.paused
+            and self.is_screen_erased()
+        )
 
     def gcode_ready(self) -> bool:
         # Return true if we are in drawing state AND the queue is not empty
@@ -397,8 +399,7 @@ class EtchBot:
             drawing = self.queue.pop(0)
 
             drawing.generate_video()
-            self.completed_drawings.append(self.queue.pop(0))
-
+            self.completed_drawings.append(drawing)
 
     def on_enter_ERASING(self, event):
         print(f"{self.name} is erasing.")
@@ -445,7 +446,7 @@ class EtchBot:
         self.watchdog_active = False
         self.command = None
 
-        if(self.camera is not None and self.is_recording()):
+        if self.camera is not None and self.is_recording():
             # Stop recording, throw away the video
             self.camera.stop_video_recording()
 
