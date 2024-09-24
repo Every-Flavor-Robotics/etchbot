@@ -9,7 +9,7 @@ from flask import Flask, Blueprint, jsonify, request
 import re
 from filelock import FileLock, Timeout
 from click import secho
-from etch_a_sketch_cli import run_pipeline
+from etch_a_sketch_cli import run_pipeline, SUPPORTED_FILE_TYPES
 from pathlib import Path
 import shutil
 from etchbot import EtchBotStore
@@ -17,18 +17,6 @@ from config import Config
 
 
 etchbot_store = EtchBotStore()
-
-SUPPORTED_IMAGE_TYPES = [".jpg", ".jpeg", ".png", ".svg"]
-SUPPORTED_VIDEO_TYPES = [".mp4", ".avi", ".mov", ".MOV"]
-SUPPORTED_GCODE_TYPES = [".gcode"]
-# optgcode bypasses all processing and is directly sent to the GCode server
-SUPPORTED_OPTIMIZED_GCODE_TYPES = [".optgcode"]
-SUPPORTED_FILE_TYPES = (
-    SUPPORTED_IMAGE_TYPES
-    + SUPPORTED_VIDEO_TYPES
-    + SUPPORTED_GCODE_TYPES
-    + SUPPORTED_OPTIMIZED_GCODE_TYPES
-)
 
 UPLOAD_DIR = Path("uploads")
 PROCESSING_DIR = Path("processing")

@@ -38,6 +38,14 @@ from gcode_filters import (
 
 counter = 0
 
+SUPPORTED_FILE_TYPES = (
+    VideoSplitters.SUPPORTED_TYPES
+    + ImagePreprocessor.SUPPORTED_TYPES
+    + Vectorizer.SUPPORTED_TYPES
+    + GCodeGenerator.SUPPORTED_TYPES
+    + GCodeFilter.SUPPORTED_TYPES
+)
+
 
 def copy_files(source, destination):
     if source.is_file():
