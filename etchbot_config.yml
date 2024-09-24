@@ -31,3 +31,4 @@ robot:
   backlash_acceleration: 9000
   max_acceleration: 25000
   error_tolerance_mm: 0.8 # mm
+  cooldown_multiplier: 0.75

@@ -2,6 +2,7 @@ import transitions
 import time
 import threading
 from pathlib import Path
+from config import Config
 
 
 class EtchBot:
@@ -348,7 +349,7 @@ class EtchBot:
         self.cooldown_start = time.time()
         drawing_time = event.kwargs.get("drawing_time", 30)
 
-        self.cooldown_time = drawing_time * 1.0
+        self.cooldown_time = drawing_time * Config().get("robot.cooldown_multiplier", 1)
 
         # Check if the robot is recording
         if self.is_recording():
