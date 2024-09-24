@@ -41,16 +41,20 @@ def extract_number(filename: str):
 
 def extract_gcode_coords(line):
     coords = [None, None, None]
-    if line.startswith('G1') or line.startswith('G0') or line.startswith('G00') or line.startswith('G01'):
-        x_match = re.search(r'X(-?\d+(\.\d+)?)', line)
-        y_match = re.search(r'Y(-?\d+(\.\d+)?)', line)
-        z_match = re.search(r'Z(-?\d+(\.\d+)?)', line)
+    if (
+        line.startswith("G1")
+        or line.startswith("G0")
+        or line.startswith("G00")
+        or line.startswith("G01")
+    ):
+        x_match = re.search(r"X(-?\d+(\.\d+)?)", line)
+        y_match = re.search(r"Y(-?\d+(\.\d+)?)", line)
+        z_match = re.search(r"Z(-?\d+(\.\d+)?)", line)
         coords[0] = float(x_match.group(1)) if x_match else None
         coords[1] = float(y_match.group(1)) if y_match else None
         coords[2] = float(z_match.group(1)) if z_match else None
 
     return coords
-
 
 
 class GCode:
@@ -249,12 +253,6 @@ class Drawing:
             print("Successfully generated video: ", output_file)
         else:
             print("Skipping video generation, not enough images")
-
-
-        if video_file is None:
-            return None
-
-        return video_file
 
     def __len__(self):
         return len(self.gcodes)
