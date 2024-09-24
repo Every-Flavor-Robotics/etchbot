@@ -278,7 +278,7 @@ class ColinearFilter(GCodeFilter):
 
     PARALLELIZABLE = True
 
-    def __init__(self, dot_product_threshold: float = 0.996):
+    def __init__(self, dot_product_threshold: float = 0.9998):
         """Initialize the ColinearFilter."""
         super().__init__()
 
@@ -415,9 +415,7 @@ class TSPOptimizer(GCodeFilter):
 
 
 class ZeroShifter(GCodeFilter):
-    """ZeroShifter shifts the GCode to end at a different origin.
-
-    """
+    """ZeroShifter shifts the GCode to end at a different origin."""
 
     PARALLELIZABLE = True
 
