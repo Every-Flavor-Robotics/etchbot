@@ -3,12 +3,19 @@
 #include <ESPmDNS.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <esp_task_wdt.h>
 #include <motorgo_mini.h>
+
+#include <atomic>
 
 #include "common/lowpass_filter.h"
 #include "common/pid.h"
 #include "configurable.h"
 #include "pid_manager.h"
+
+TaskHandle_t loop_foc_task;
+TickType_t xLastWakeTime;
+void loop_foc(void* pvParameters);
 
 const char* ssid = WIFI_SSID;
 const char* password = WIFI_PASSWORD;
@@ -19,12 +26,10 @@ MotorGo::MotorGoMini motorgo_mini;
 MotorGo::MotorChannel& tilt_motor = motorgo_mini.ch0;
 
 MotorGo::MotorConfiguration gm3506_config;
-MotorGo::ChannelConfiguration config_ch0;
-MotorGo::ChannelConfiguration config_ch1;
+MotorGo::ChannelConfiguration tilt_motor_config;
 
 // Velocity controller parameters
-MotorGo::PIDParameters velocity_controller_parameters_ch0;
-MotorGo::PIDParameters velocity_controller_parameters_ch1;
+MotorGo::PIDParameters erasing_velocity_controller;
 
 // Position controller parameters
 MotorGo::PIDParameters erasing_position_controller_parameters;
@@ -39,10 +44,14 @@ ESPWifiConfig::Configurable<bool> enable_motors(motors_enabled, "/enable",
 unsigned long last_time = micros();
 unsigned long hold_time = 2.5 * 1e6;
 
-float zero_position = 0.06;
+float zero_position = -0.06;
 float erase_position_1 = PI;
 float erase_position_2 = PI / 3;
-float target_pos = 0;
+
+std::atomic<float> target_pos{0.0};
+std::atomic<float> erase_begin{false};
+std::atomic<float> disable_flag{false};
+std::atomic<float> enable_flag{false};
 
 int cur_cycle_count = 0;
 int erase_cycles = 5;
@@ -55,22 +64,6 @@ unsigned long zero_start_time = 0;
 unsigned long zero_hold_time = 8 * 1e6;
 
 float error_tolerance = 0.1;
-
-void enable_motors_callback(bool value)
-{
-  if (value)
-  {
-    Serial.println("Enabling motors");
-    // motor_left.enable();
-    tilt_motor.enable();
-  }
-  else
-  {
-    Serial.println("Disabling motors");
-    // motor_left.disable();
-    tilt_motor.disable();
-  }
-}
 
 void freq_println(String str, int freq)
 {
@@ -130,15 +123,13 @@ float get_target(float cur_angle, float target_angle, int direction)
 // yellow -> 42
 uint8_t input_pin = 41;
 uint8_t output_pin = 42;
-bool erase_begin = false;
 void setup()
 {
   Serial.begin(5000000);
 
-  delay(5000);
+  //   delay(5000);
 
   WiFi.mode(WIFI_STA);
-  WiFi.setHostname("etchbot-1-eraser");
   WiFi.begin(ssid, password);
 
   //   Try connecting 5 times, then give up
@@ -201,18 +192,19 @@ void setup()
   gm3506_config.phase_resistance = 5.6;
   gm3506_config.calibration_voltage = 2.0;
 
-  config_ch1.motor_config = gm3506_config;
-  config_ch1.power_supply_voltage = 9.0;
-  config_ch1.reversed = true;
+  tilt_motor_config.motor_config = gm3506_config;
+  tilt_motor_config.power_supply_voltage = 9.0;
+  tilt_motor_config.reversed = true;
 
-  tilt_motor.init(config_ch1, false);
+  tilt_motor.init(tilt_motor_config, false);
 
-  velocity_controller_parameters_ch1.p = 1.0;
-  velocity_controller_parameters_ch1.lpf_time_constant = 0.1;
+  erasing_velocity_controller.p = 1.0;
+  erasing_velocity_controller.lpf_time_constant = 0.1;
 
-  holding_position_controller_parameters.p = 2.0;
-  holding_position_controller_parameters.i = 0.05;
-  holding_position_controller_parameters.limit = 2.0;
+  holding_position_controller_parameters.p = 9;
+  holding_position_controller_parameters.i = 0.1;
+  holding_position_controller_parameters.d = 0.9;
+  holding_position_controller_parameters.lpf_time_constant = 0.09;
 
   // Configure the position controller
   erasing_position_controller_parameters.p = 3.5;
@@ -226,15 +218,14 @@ void setup()
       holding_position_controller_parameters.output_ramp;
   position_controller.limit = holding_position_controller_parameters.limit;
 
-  //   We do this ONLY to update the internal low-pass filter for the position
-  //   output
-  erasing_position_controller_parameters.lpf_time_constant = 0.1;
-  tilt_motor.set_position_controller(erasing_position_controller_parameters);
-  tilt_motor.set_velocity_controller(velocity_controller_parameters_ch1);
-  tilt_motor.set_control_mode(MotorGo::ControlMode::Velocity);
+  // Configure the velocity controller used for flipping
+  tilt_motor.set_velocity_controller(erasing_velocity_controller);
   tilt_motor.set_velocity_limit(FLIPPING_VELOCITY_RAD_PER_SEC);
 
-  enable_motors.set_post_callback(enable_motors_callback);
+  // Pass the velocity controller in, ONLY to update the internal low-pass
+  tilt_motor.set_position_controller(holding_position_controller_parameters);
+  // Set voltage control mode for holding
+  tilt_motor.set_control_mode(MotorGo::ControlMode::Voltage);
 
   pinMode(CH1_UH, OUTPUT);
   pinMode(CH1_UL, OUTPUT);
@@ -252,8 +243,16 @@ void setup()
   ledcAttachPin(CH1_UL, 6);
   ledcAttachPin(CH1_VL, 7);
 
-  tilt_motor.enable();
-  tilt_motor.loop();
+  xTaskCreatePinnedToCore(
+      loop_foc,       /* Task function. */
+      "Loop FOC",     /* name of task. */
+      10000,          /* Stack size of task */
+      NULL,           /* parameter of the task */
+      1,              /* priority of the task */
+      &loop_foc_task, /* Task handle to keep track of created task */
+      1);             /* pin task to core 1 */
+
+  delay(1000);
 
   //   Find the shortest distance to zero position, for holding
   float target_forward =
@@ -271,17 +270,59 @@ void setup()
   }
 
   Serial.println(target_pos);
+  enable_flag.store(true);
+}
+
+void loop_foc(void* pvParameters)
+{
+  Serial.print("Loop FOC running on core ");
+  Serial.println(xPortGetCoreID());
+
+  for (;;)
+  {
+    tilt_motor.loop();
+
+    float output = position_controller(target_pos - tilt_motor.get_position());
+
+    // Switch between velocity control (for erasing) and voltage control (for
+    // holding)
+    if (erase_begin.load())
+    {
+      tilt_motor.set_target_velocity(output);
+    }
+    else
+    {
+      tilt_motor.set_target_voltage(output);
+    }
+
+    if (disable_flag.load())
+    {
+      tilt_motor.disable();
+      disable_flag.store(false);
+    }
+    if (enable_flag.load())
+    {
+      tilt_motor.enable();
+      enable_flag.store(false);
+    }
+
+    esp_task_wdt_reset();
+  }
 }
 
 void loop()
 {
   ArduinoOTA.handle();
+  // Update the motors
   float angle = tilt_motor.get_position();
 
   // Wait until we receive a high on the input pin
   if (digitalRead(input_pin) == HIGH && !erase_begin)
   {
     digitalWrite(output_pin, HIGH);
+
+    disable_flag.store(true);
+    delay(100);
 
     // Switch to erasing parameters
     position_controller.P = erasing_position_controller_parameters.p;
@@ -293,12 +334,17 @@ void loop()
 
     position_controller.reset();
 
+    // Switch to velocity control mode for erasing
+    tilt_motor.set_control_mode(MotorGo::ControlMode::Velocity);
+
+    enable_flag.store(true);
+
     erase_begin = true;
   }
 
   if (erase_begin)
   {
-    erase_motor_pwm = 255 * (1.5 / config_ch1.power_supply_voltage);
+    erase_motor_pwm = 255 * (1.5 / tilt_motor_config.power_supply_voltage);
 
     digitalWrite(CH1_UH, HIGH);
     ledcWrite(7, erase_motor_pwm);
@@ -322,7 +368,7 @@ void loop()
         Serial.println("Erasing complete");
 
         // Stop motors
-        tilt_motor.disable();
+        disable_flag.store(true);
 
         ledcWrite(7, 0);
 
@@ -360,13 +406,4 @@ void loop()
     digitalWrite(CH1_UH, LOW);
     ledcWrite(7, 0);
   }
-
-  float error = target_pos - angle;
-
-  float output = position_controller(error);
-  // Print position and error
-  tilt_motor.set_target_velocity(output);
-
-  // Update the motors
-  tilt_motor.loop();
 }
