@@ -19,7 +19,7 @@ from config import Config
 etchbot_store = EtchBotStore()
 
 SUPPORTED_IMAGE_TYPES = [".jpg", ".jpeg", ".png", ".svg"]
-SUPPORTED_VIDEO_TYPES = [".mp4", ".avi", ".mov"]
+SUPPORTED_VIDEO_TYPES = [".mp4", ".avi", ".mov", ".MOV"]
 SUPPORTED_GCODE_TYPES = [".gcode"]
 # optgcode bypasses all processing and is directly sent to the GCode server
 SUPPORTED_OPTIMIZED_GCODE_TYPES = [".optgcode"]

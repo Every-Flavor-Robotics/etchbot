@@ -31,7 +31,7 @@ from gcode_filters import (
     TSPOptimizer,
     GCodeCleaner,
     RemoveZ,
-    ZeroShifter
+    ZeroShifter,
 )
 
 counter = 0
@@ -81,7 +81,9 @@ def run_pipeline(
         #     BlackAndWhitePreprocessor(),
         # ]
 
-    video_splitters = [FFmpegSplitter(Config().get("video_generation.frame_rate", None))]
+    video_splitters = [
+        FFmpegSplitter(Config().get("video_generation.frame_rate", None))
+    ]
 
     preprocessors = [
         RemBGPreprocessor(),
@@ -92,16 +94,25 @@ def run_pipeline(
         BlackAndWhitePreprocessor(),
     ]
     vectorizers = [PotraceVectorizer()]
-    gcode_converters = [Svg2GcodeGenerator(feed_rate=Config().get("drawing.feed_rate", None),
-                output_width=Config().get("drawing.width", None),
-                output_height=Config().get("drawing.height", None),
-                origin=(Config().get("drawing.origin_x", 0.0), Config().get("drawing.origin_y", 0.0))),]
+    gcode_converters = [
+        Svg2GcodeGenerator(
+            feed_rate=Config().get("drawing.feed_rate", None),
+            output_width=Config().get("drawing.width", None),
+            output_height=Config().get("drawing.height", None),
+            origin=(
+                Config().get("drawing.origin_x", 0.0),
+                Config().get("drawing.origin_y", 0.0),
+            ),
+        ),
+    ]
     gcode_filters = [
         GCodeCleaner(),
         RemoveZ(),
         ResolutionReducer(1.2),
         ColinearFilter(0.996),
-        TSPOptimizer(Config().get("drawing.origin_x", 0.0), Config().get("drawing.origin_y", 0.0)),
+        TSPOptimizer(
+            Config().get("drawing.origin_x", 0.0), Config().get("drawing.origin_y", 0.0)
+        ),
     ]
 
     # Confirm that the input file exists
@@ -123,7 +134,7 @@ def run_pipeline(
         input_file.rename(new_input_file)
         input_file = new_input_file
 
-    if not file_type_correct(input_file, [".mp4", ".mov", ".avi", ".mkv"]):
+    if not file_type_correct(input_file, [".mp4", ".mov", ".avi", ".mkv", ".MOV"]):
         click.secho(f"Skipping video splitting...", fg="red")
 
     else:

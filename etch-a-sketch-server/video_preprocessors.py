@@ -21,7 +21,7 @@ class VideoSplitters(Preprocessor):
     All video splitters separate a video into individual frames. They take in a video file and output a directory of images.
     """
 
-    SUPPORTED_TYPES = [".mp4", ".mov", ".mkv"]
+    SUPPORTED_TYPES = [".mp4", ".mov", ".mkv", ".MOV"]
     OUTPUT_EXTENSION = ""
 
 
