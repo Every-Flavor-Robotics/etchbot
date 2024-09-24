@@ -4,6 +4,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
 from click import secho
+from config import Config
 
 
 class Preprocessor(ABC):
@@ -111,7 +112,9 @@ class Preprocessor(ABC):
         # Process each input
         # if PARALLELIZABLE is True, use ThreadPoolExecutor
         if self.PARALLELIZABLE:
-            with ThreadPoolExecutor() as executor:
+            with ThreadPoolExecutor(
+                max_workers=Config().get("server.max_workers", None)
+            ) as executor:
                 executor.map(process_file, input_files)
         else:
             for input_file in input_files:

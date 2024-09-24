@@ -6,6 +6,7 @@ server:
   # Server port
   port: 5010
   stream_port: 5005
+  max_workers: 12
 
 video_generation:
   frame_rate: 8
