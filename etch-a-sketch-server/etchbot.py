@@ -215,7 +215,7 @@ class EtchBot:
 
         except transitions.MachineError:
             # If the condition is not met or the state machine is in an invalid state, return None
-            return None
+            return "invalid"
 
     def get_queue_information(self) -> list:
         """Returns information about the current queue.

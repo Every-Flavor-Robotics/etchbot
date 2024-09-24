@@ -130,9 +130,7 @@ def get_etchbot_status(etchbot_name):
             "state": etchbot.state,
             "current_drawing": drawing,
             "camera_connected": etchbot.camera is not None,
-            "camera_recording": (
-                etchbot.is_recording()
-            ),
+            "camera_recording": (etchbot.is_recording()),
             "recording_mode": etchbot.record_while_drawing,
             "paused": etchbot.paused,
             "cooldown_remaining": etchbot.cooldown_remaining(),
@@ -404,6 +402,7 @@ def get_command():
     Returns:
     - 200: If the command was successfully retrieved
     - 204: If there are no commands to execute
+    - 401: If the EtchBot has not connected yet
     - 500: If an error occurred while retrieving the command
     """
 
@@ -433,6 +432,9 @@ def get_command():
 
         # Send command if it exists
         if command:
+            if command == "invalid":
+                return jsonify({"error": "Must connect before retrieving state"}), 401
+
             print(f"EtchBot {name} command retrieved: {command}")
             return jsonify({"command": command}), 200
 
@@ -647,6 +649,7 @@ def main(config):
         print(f"{rule.endpoint}: {rule.rule}")
 
     app.run("0.0.0.0", port=5010, use_reloader=False, debug=False)
+
 
 if __name__ == "__main__":
     main()
