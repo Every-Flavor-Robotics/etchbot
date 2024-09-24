@@ -11,7 +11,7 @@ import shutil
 import click
 import time
 
-from video_preprocessors import FFmpegSplitter
+from video_preprocessors import FFmpegSplitter, VideoSplitters
 
 from image_preprocessors import (
     ColorbookPreprocessor,
@@ -21,9 +21,10 @@ from image_preprocessors import (
     RemBGPreprocessor,
     CartoonifyPreProcessor,
     InformativeDrawingsPreprocessor,
+    ImagePreprocessor,
 )
-from vectorizers import PotraceVectorizer
-from gcode_generators import Svg2GcodeGenerator
+from vectorizers import PotraceVectorizer, Vectorizer
+from gcode_generators import Svg2GcodeGenerator, GCodeGenerator
 import shutil
 from gcode_filters import (
     ResolutionReducer,
@@ -32,6 +33,7 @@ from gcode_filters import (
     GCodeCleaner,
     RemoveZ,
     ZeroShifter,
+    GCodeFilter,
 )
 
 counter = 0
@@ -48,7 +50,7 @@ def file_type_correct(path: pathlib.Path, file_type: list[str]):
     # If directory, check if any file in the directory is of the correct type
     if path.is_dir():
         for file in path.iterdir():
-            if file.suffix in file_type:
+            if file.suffix.lower() in file_type:
                 return True
         return False
     # If file, check if the file is of the correct type
@@ -137,7 +139,7 @@ def run_pipeline(
         input_file.rename(new_input_file)
         input_file = new_input_file
 
-    if not file_type_correct(input_file, [".mp4", ".mov", ".avi", ".mkv", ".MOV"]):
+    if not file_type_correct(input_file, VideoSplitters.SUPPORTED_TYPES):
         click.secho(f"Skipping video splitting...", fg="red")
 
     else:
@@ -158,7 +160,7 @@ def run_pipeline(
 
     # Only run preprocessor if input file is an image
     if (
-        not file_type_correct(input_file, [".jpg", ".jpeg", ".png"])
+        not file_type_correct(input_file, ImagePreprocessor.SUPPORTED_TYPES)
         or skip_preprocessing
     ):
         # Print in red, skipping pre-processing
@@ -181,7 +183,7 @@ def run_pipeline(
 
         # Print in green, processing complete
         click.secho(f"Pre-Processing complete!", fg="green")
-    if not file_type_correct(input_file, [".jpg", ".jpeg", ".png"]):
+    if not file_type_correct(input_file, Vectorizer.SUPPORTED_TYPES):
         # Print in red, skipping pre-processing
         click.secho(f"Skipping Vectorizing...", fg="red")
     else:
@@ -201,7 +203,7 @@ def run_pipeline(
         # Print in green, processing complete
         click.secho(f"Vectorizing complete!", fg="green")
 
-    if not file_type_correct(input_file, [".svg"]):
+    if not file_type_correct(input_file, GCodeGenerator.SUPPORTED_TYPES):
         # Print in red, skipping pre-processing
         click.secho(f"Skipping g-code conversion...", fg="red")
     else:
@@ -223,6 +225,8 @@ def run_pipeline(
         # Print in green, processing complete
         click.secho(f"Converting to G-code complete!", fg="green")
 
+    # NOTE, even though all of the filters support type .optgcode, we are only checking for .gcode
+    # This means we will do not ANY filtering if we receive an .optgcode file
     if not file_type_correct(input_file, [".gcode"]):
         # Print in red, skipping pre-processing
         click.secho(f"Skipping G-code filtering...", fg="red")
