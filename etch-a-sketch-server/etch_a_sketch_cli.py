@@ -55,7 +55,7 @@ def file_type_correct(path: pathlib.Path, file_type: list[str]):
         return False
     # If file, check if the file is of the correct type
     elif path.is_file():
-        return path.suffix in file_type
+        return path.suffix.lower() in file_type
     return False
 
 
