@@ -97,6 +97,13 @@ void setup()
       delay(2000);
       esp_restart();
     }
+    else if (return_code == 401)
+    {
+      // Server lost connection to etch a sketch, restart ESP and try again
+      Serial.println("Server lost connection to ESP, restarting ESP");
+      delay(2000);
+      esp_restart();
+    }
 
     http.end();
 
