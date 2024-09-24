@@ -42,6 +42,7 @@ class HTTPCamera:
             return None
 
         # Save the response content to a file in the save_dir
+        extension = "png"
         save_path = save_dir / f"{name}.{extension}"
         with open(save_path, "wb") as file:
             file.write(response.content)
@@ -68,8 +69,6 @@ class HTTPCamera:
             raise Exception(f"Invalid directory: {save_dir}")
 
         self.is_recording = False
-
-
 
         # Send a POST request to /stop_video_recording/<int:cam_id> and return the response
         try:
