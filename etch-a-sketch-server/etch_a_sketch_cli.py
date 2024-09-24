@@ -111,7 +111,10 @@ def run_pipeline(
         ResolutionReducer(1.2),
         ColinearFilter(0.996),
         TSPOptimizer(
-            Config().get("drawing.origin_x", 0.0), Config().get("drawing.origin_y", 0.0)
+            (
+                Config().get("drawing.origin_x", 0.0),
+                Config().get("drawing.origin_y", 0.0),
+            )
         ),
     ]
 
