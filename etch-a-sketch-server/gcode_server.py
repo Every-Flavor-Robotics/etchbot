@@ -5,6 +5,7 @@ import time
 import click
 import threading
 import socket
+import subprocess
 from flask import Flask, Blueprint, jsonify, request
 import re
 from filelock import FileLock, Timeout
@@ -237,6 +238,7 @@ class Drawing:
             process = subprocess.Popen(
                 command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
             )
+            process.wait()
 
             print("Successfully generated video: ", output_file)
         else:
