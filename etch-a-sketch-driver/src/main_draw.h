@@ -20,24 +20,18 @@
 #include "wifi_gcode_stream.h"
 
 //  Conversion from mm to radians
-// #define GEAR_RATIO (18.0f / 81.0f)  // Motor to knob
 #define RAD_PER_MM (MM_TO_KNOB_RAD / GEAR_RATIO)
 #define MMPERMIN_TO_RADPERSEC (RAD_PER_MM / 60.0)
-// #define ACCELERATION 15000
-// #define BACKLASH_ACCELERATION 8000
-// #define MAX_ACCELERATION 25000
-// #define UP_DOWN_BACKLASH_RAD (2.6 * RAD_PER_MM)
-// #define LEFT_RIGHT_BACKLASH_RAD (2.0 * RAD_PER_MM)
 #define UP_DOWN_BACKLASH_RAD (UP_DOWN_BACKLASH_MM * RAD_PER_MM)
 #define LEFT_RIGHT_BACKLASH_RAD (LEFT_RIGHT_BACKLASH_MM * RAD_PER_MM)
-// #define BACKLASH_COMEPSENATION_RADPERSEC BACKLASH_COMPENSATION_SPEED
+
 // mm * RAD_PER_MM = rad
 #define ERROR_TOLERANCE (ERROR_TOLERANCE_MM * RAD_PER_MM)
 #define sign(x) ((x) < -0.0001 ? -1 : ((x) > 0.0001 ? 1 : 0))
 #define ENABLED
 
-#define X_LIM 130
-#define Y_LIM 89.375
+#define X_LIM (WIDTH + ORIGIN_X)
+#define Y_LIM (HEIGHT + ORIGIN_Y)
 
 size_t replan_horizon = 1;
 
@@ -164,15 +158,71 @@ void enable_motors_callback(bool value)
 
 void home()
 {
-  //   Serial.println("HOMING: WAITING FOR BUTTON PRESS");
-
-  disable_flag = true;
-  delay(10);
-
-  //   Serial.println("HOMING: BEGINNING");
+  Serial.println("Starting homing procedure");
+  left_right.disable();
+  up_down.disable();
+  left_right.loop();
+  up_down.loop();
   delay(1000);
-  //   left_right.zero_position();
-  //   up_down.zero_position();
+  float homing_speed = 1.0;
+
+  left_right.set_control_mode(MotorGo::ControlMode::VelocityOpenLoop);
+  up_down.set_control_mode(MotorGo::ControlMode::VelocityOpenLoop);
+
+  //   Update position first
+  for (int i = 0; i < 1000; i++)
+  {
+    left_right.loop();
+    up_down.loop();
+    delay(1);
+  }
+
+  float target = RAD_PER_MM * (ORIGIN_X + 1.0) + LEFT_RIGHT_BACKLASH_RAD;
+  left_right.enable();
+  while (left_right.get_position() < target)
+  {
+    left_right.loop();
+    // Move right
+    left_right.set_target_velocity(homing_speed);
+  }
+  left_right.set_target_velocity(0.0);
+  left_right.loop();
+
+  target = ORIGIN_X;
+  while (left_right.get_position() > target)
+  {
+    left_right.loop();
+    // Move left
+    left_right.set_target_velocity(-homing_speed);
+  }
+  left_right.set_target_velocity(0.0);
+  left_right.disable();
+  left_right.loop();
+
+  //   Up down homing
+  target = RAD_PER_MM * (ORIGIN_Y + 1.0) + UP_DOWN_BACKLASH_RAD;
+  up_down.enable();
+  while (up_down.get_position() < target)
+  {
+    up_down.loop();
+    // Move up
+    up_down.set_target_velocity(homing_speed);
+  }
+  up_down.set_target_velocity(0.0);
+  up_down.loop();
+
+  target = ORIGIN_Y;
+  while (up_down.get_position() > target)
+  {
+    up_down.loop();
+    // Move down
+    up_down.set_target_velocity(-homing_speed);
+  }
+  up_down.set_target_velocity(0.0);
+  up_down.disable();
+  up_down.loop();
+
+  Serial.println("Homing complete");
 }
 
 void draw_pre_setup()
@@ -190,7 +240,7 @@ void draw_pre_setup()
   left_right_velocity_pid_params.i = 0.0;
   left_right_velocity_pid_params.d = 0.0;
   left_right_velocity_pid_params.lpf_time_constant = 0.00;
-  left_right_ff_accel_gain = 0.023 / 100;
+  left_right_ff_accel_gain = 0.028 / 100;
   left_right_ff_velocity_gain = 0.011;
 
   left_right_velocity_pid.P = left_right_velocity_pid_params.p;
@@ -202,7 +252,7 @@ void draw_pre_setup()
   up_down_velocity_pid_params.i = 0.0;
   up_down_velocity_pid_params.d = 0.0;
   up_down_velocity_pid_params.lpf_time_constant = 0.00;
-  up_down_ff_accel_gain = 0.023 / 100;
+  up_down_ff_accel_gain = 0.028 / 100;
   up_down_ff_velocity_gain = 0.011;
 
   up_down_velocity_pid.P = up_down_velocity_pid_params.p;
@@ -294,12 +344,13 @@ void draw_setup()
       &loop_foc_task, /* Task handle to keep track of created task */
       1);             /* pin task to core 1 */
 
-  state.is_complete = false;
+  //   delay(3000);
+
+  //   state.is_complete = false;
 
   //   left_right.zero_position();
   //   up_down.zero_position();
   state.is_complete = true;
-  delay(2000);
 
   previous_position_x = left_right.get_position();
   previous_position_y = up_down.get_position();
@@ -331,7 +382,7 @@ void loop_foc(void* pvParameters)
   //     disable_flag = true;
   //   }
 
-  for (;;)
+  while (!complete)
   {
     // Service flags
     if (enable_flag)
@@ -403,15 +454,17 @@ void loop_foc(void* pvParameters)
 
     esp_task_wdt_reset();
   }
+  //   End task once complete
+  vTaskDelete(NULL);
 }
 
 bool draw_loop()
 {
   // Safety conditions
   if (left_right.get_position() > (X_LIM + 8) * RAD_PER_MM ||
-      left_right.get_position() < -8 * RAD_PER_MM ||
+      left_right.get_position() < (ORIGIN_X - 8) * RAD_PER_MM ||
       up_down.get_position() > (Y_LIM + 8) * RAD_PER_MM ||
-      up_down.get_position() < -8 * RAD_PER_MM)
+      up_down.get_position() < (ORIGIN_Y - 8) * RAD_PER_MM)
   {
     Serial.println("Position out of bounds");
     disable_flag = true;
@@ -431,9 +484,9 @@ bool draw_loop()
         up_down.get_position() - up_down_backlash_offset;
 
     profile.main_profile.x_final =
-        constrain(current_command->x * RAD_PER_MM, 0, X_LIM * RAD_PER_MM);
+        RAD_PER_MM * constrain(current_command->x, ORIGIN_X, X_LIM);
     profile.main_profile.y_final =
-        constrain(current_command->y * RAD_PER_MM, 0, Y_LIM * RAD_PER_MM);
+        RAD_PER_MM * constrain(current_command->y, ORIGIN_Y, Y_LIM);
 
     profile.main_profile.v_initial = 0;
     profile.main_profile.v_target =
@@ -452,8 +505,9 @@ bool draw_loop()
     if (current_command->home)
     {
       Serial.println("Homing");
-      home();
       complete = true;
+
+      home();
       Serial.println(complete);
     }
     //   Otherwise, generate a trapezoid profile
