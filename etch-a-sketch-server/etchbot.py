@@ -520,6 +520,23 @@ class EtchBotStore:
         self.name_dict[robot.name] = robot
         self.ip_dict[robot.ip] = robot
 
+    def update_ip(self, name: str, ip: str):
+        robot = self.get_robot_by_name(name)
+
+        if robot is None:
+            print(
+                f"Error: Robot with name {name} not found. Please add the robot first."
+            )
+            return
+
+        if robot.ip in self.ip_dict:
+            del self.ip_dict[robot.ip]
+        else:
+            print("Warning: Robot not found in IP dictionary.")
+
+        robot.update_ip(ip)
+        self.ip_dict[ip] = robot
+
     def get_robot_by_name(self, name) -> "EtchBot":
         return self.name_dict.get(name, None)
 
