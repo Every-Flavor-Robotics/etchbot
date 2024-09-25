@@ -371,6 +371,7 @@ def connect():
         else:
             # Confirm that the IP address matches the existing EtchBot
             etchbot_store.update_ip(name, ip)
+            etchbot = etchbot_store.get_robot_by_name(name)
 
         # Connect the EtchBot
         try:
