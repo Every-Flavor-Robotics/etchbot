@@ -19,7 +19,7 @@ drawing:
   acceleration: 16000
   # Zero position in mm
   origin_x: 1.5
-  origin_y: 1.5
+  origin_y: 3.5
 
 robot:
   # 18:81
