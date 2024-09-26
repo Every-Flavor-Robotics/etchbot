@@ -77,34 +77,23 @@ class GCode:
         print(f"Read in {len(self.gcode_lines)} lines from {self.gcode_file}.")
         self.loaded = True
 
-    def get_gcode(self, num_lines, batch_idx):
+    def get_gcode(self, num_lines, start_line):
         if self.loaded == False:
             self.load()
 
-        gcode_block = None
-        if batch_idx == self.expected_batch_idx:
-            # Create a new batch and add it to the list
-            self.batches.append(
-                "".join(
-                    self.gcode_lines[self.line_number : self.line_number + num_lines]
-                )
-            )
-            gcode_block = self.batches[batch_idx]
+        # Confirm that start line is within bounds
+        # Simply return an END statement if it's not
+        if start_line < 0 or start_line >= len(self.gcode_lines):
+            return "END\n"
 
-            self.expected_batch_idx += 1
-            self.line_number += num_lines
+        end_line = start_line + num_lines
 
-        # Simply return the previous batch that's being requested
-        elif batch_idx < self.expected_batch_idx:
-            gcode_block = self.batches[batch_idx]
-        else:
-            # Something very bad happened
-            # Return to home
-            x = Config().get("drawing.origin_x", 0.0)
-            y = Config().get("drawing.origin_y", 0.0)
+        # Retrieve the requested lines
+        gcode_lines = self.gcode_lines[start_line:end_line]
+        gcode_block = "".join(gcode_lines)
 
-            home_gcodes = [f"G0 X{x} Y{y}\n", "G28\n", "END\n"]
-            gcode_block = "".join(home_gcodes)
+        # Save the maximum line number that has been requested
+        self.line_number = max(self.line_number, end_line)
 
         return gcode_block
 
@@ -313,19 +302,22 @@ class GCodeRequestHandler(socketserver.StreamRequestHandler):
 
                     try:
                         # Extract the 'lines' parameter and convert it to an integer
-                        num_lines_requested = int(params.get("lines", None))
+                        num_lines_requested = params.get("lines", None)
                         # Extract the 'batch' parameter and convert it to an integer
-                        batch_index = int(params.get("batch", None))
+                        start_line = params.get("start_line", None)
 
                         # Check if the parameters are valid
-                        if num_lines_requested is None or batch_index is None:
+                        if num_lines_requested is None or start_line is None:
                             raise ValueError
+
+                        num_lines_requested = int(num_lines_requested)
+                        start_line = int(start_line)
                     except ValueError:
                         self.request.sendall(b"Invalid request format.\n")
                         continue
 
                     # Now you can use both parameters as needed
-                    gcode_block = gcode.get_gcode(num_lines_requested, batch_index)
+                    gcode_block = gcode.get_gcode(num_lines_requested, start_line)
 
                     print("Sending response")
                     self.request.sendall(gcode_block.encode())
@@ -334,10 +326,10 @@ class GCodeRequestHandler(socketserver.StreamRequestHandler):
 
         except socket.timeout:
             print("Connection timed out. Will retry this gcode next timee")
-            gcode.reset()
+            # gcode.reset()
         except (ConnectionResetError, BrokenPipeError):
             print("Connection closed by client. Will retry this gcode next time")
-            gcode.reset()
+            # gcode.reset()
         print("G-code transmission ended. Closing connection.")
         self.request.close()
 
