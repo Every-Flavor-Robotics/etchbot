@@ -64,35 +64,48 @@ class GCode:
             self.gcode_lines = []
 
         self.line_number = 0
+        self.expected_batch_idx = 0
+        self.batches = []
 
     def load(self):
         with open(self.gcode_file) as f:
             self.gcode_lines = f.readlines()
 
-            # Get coords of the last line
-            last_line = self.gcode_lines[-1]
-            last_coords = extract_gcode_coords(last_line)
-            # Remove it if it's returning to home (0,0)
-            if last_coords[0] == 0 and last_coords[1] == 0:
-                self.gcode_lines.pop()
-
-            zero_point = Config().get("drawing.zero", 0.0)
-
-            self.gcode_lines.append(f"G0 X{zero_point} Y{zero_point}\n")
             self.gcode_lines.append("G28\n")
             self.gcode_lines.append("END\n")
 
         print(f"Read in {len(self.gcode_lines)} lines from {self.gcode_file}.")
         self.loaded = True
 
-    def get_gcode(self, num_lines):
+    def get_gcode(self, num_lines, batch_idx):
         if self.loaded == False:
             self.load()
 
-        gcode_block = "".join(
-            self.gcode_lines[self.line_number : self.line_number + num_lines]
-        )
-        self.line_number += num_lines
+        gcode_block = None
+        if batch_idx == self.expected_batch_idx:
+            # Create a new batch and add it to the list
+            self.batches.append(
+                "".join(
+                    self.gcode_lines[self.line_number : self.line_number + num_lines]
+                )
+            )
+            gcode_block = self.batches[batch_idx]
+
+            self.expected_batch_idx += 1
+            self.line_number += num_lines
+
+        # Simply return the previous batch that's being requested
+        elif batch_idx < self.expected_batch_idx:
+            gcode_block = self.batches[batch_idx]
+        else:
+            # Something very bad happened
+            # Return to home
+            x = Config().get("drawing.origin_x", 0.0)
+            y = Config().get("drawing.origin_y", 0.0)
+
+            home_gcodes = [f"G0 X{x} Y{y}\n", "G28\n", "END\n"]
+            gcode_block = "".join(home_gcodes)
+
         return gcode_block
 
     def complete(self):
@@ -109,6 +122,8 @@ class GCode:
 
     def reset(self):
         self.line_number = 0
+        self.batches = []
+        self.expected_batch_idx = 0
 
     def get_name(self):
         return self.gcode_file.stem
@@ -233,7 +248,7 @@ class Drawing:
             framerate = Config().get("video_generation.frame_rate", None)
             input_file = artifact_dir / "frame_%04d.png"
             output_file = artifact_dir / "output.mp4"
-            command = f"/usr/bin/ffmpeg -framerate {framerate} -i {input_file} -c:v libx264 -crf 0 -pix_fmt yuv420p {output_file}"
+            command = f"/usr/bin/ffmpeg -framerate {framerate} -i {input_file} -c:v libx264 -pix_fmt yuv420p {output_file}"
 
             process = subprocess.Popen(
                 command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
@@ -283,13 +298,34 @@ class GCodeRequestHandler(socketserver.StreamRequestHandler):
 
                 print("Waiting for data...")
                 data = self.request.recv(1024).strip().decode()
-                if data.startswith("GET /gcode?lines="):
+
+                if data.startswith("GET /gcode?"):
+                    # Extract the query string part from the request
+                    query_string = data.split("?", 1)[1].split(" ")[0]
+                    # Initialize a dictionary to hold the parameters
+                    params = {}
+                    # Split the query string into individual parameters
+                    for param in query_string.split("&"):
+                        key_value = param.split("=")
+                        if len(key_value) == 2:
+                            key, value = key_value
+                            params[key] = value
+
                     try:
-                        num_lines_requested = int(data.split("=")[1].split(" ")[0])
-                    except (ValueError, IndexError):
+                        # Extract the 'lines' parameter and convert it to an integer
+                        num_lines_requested = int(params.get("lines", None))
+                        # Extract the 'batch' parameter and convert it to an integer
+                        batch_index = int(params.get("batch", None))
+
+                        # Check if the parameters are valid
+                        if num_lines_requested is None or batch_index is None:
+                            raise ValueError
+                    except ValueError:
                         self.request.sendall(b"Invalid request format.\n")
                         continue
-                    gcode_block = gcode.get_gcode(num_lines_requested)
+
+                    # Now you can use both parameters as needed
+                    gcode_block = gcode.get_gcode(num_lines_requested, batch_index)
 
                     print("Sending response")
                     self.request.sendall(gcode_block.encode())
