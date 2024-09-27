@@ -288,6 +288,10 @@ class GCodeRequestHandler(socketserver.StreamRequestHandler):
                 print("Waiting for data...")
                 data = self.request.recv(1024).strip().decode()
 
+                if not data:
+                    print("No data received. Client may have disconnected.")
+                    break  # Exit the loop
+
                 if data.startswith("GET /gcode?"):
                     # Extract the query string part from the request
                     query_string = data.split("?", 1)[1].split(" ")[0]
