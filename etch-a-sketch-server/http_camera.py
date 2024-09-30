@@ -63,21 +63,32 @@ class HTTPCamera:
         # Return whether or not the response was successful
         return response.ok
 
-    def stop_video_recording(self, save_dir: Path, name="video"):
-        # Confirm that the save_dir exists and is a directory
-        if not save_dir.is_dir():
-            raise Exception(f"Invalid directory: {save_dir}")
-
-        self.is_recording = False
+    def stop_video_recording(self, save_dir: Path = None, name="video"):
+        # If the camera is not recording, return None
+        if not self.is_recording:
+            return None
 
         # Send a POST request to /stop_video_recording/<int:cam_id> and return the response
         try:
             response = requests.post(
-                f"{self.url}/stop_video_recording/{self.camera_index}"
+                f"{self.url}/stop_video_recording/{self.camera_index}",
+                stream=True,  # Enable streaming of the response content
             )
+            self.is_recording = False
         except requests.exceptions.ConnectionError:
             return None
 
+        # If save_dir is None, we do not save the video content
+        if save_dir is None:
+            # Ensure the response content is consumed to free resources
+            response.close()
+            return None
+
+        # Confirm that the save_dir exists and is a directory
+        if not save_dir.is_dir():
+            raise Exception(f"Invalid directory: {save_dir}")
+
+        # Save the response content to a file in the save_dir
         save_path = None
         if response.status_code == 200:
             video_file_path = f"{name}.mp4"
@@ -86,5 +97,9 @@ class HTTPCamera:
                 for chunk in response.iter_content(chunk_size=1024):
                     if chunk:
                         file.write(chunk)
+        else:
+            # Handle non-200 responses if necessary
+            response.close()
+            raise Exception(f"Failed to stop recording: {response.status_code}")
 
         return save_path
