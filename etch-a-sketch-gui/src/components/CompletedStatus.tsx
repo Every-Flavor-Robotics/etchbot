@@ -47,11 +47,11 @@ const CompletedStatus: React.FC<CompletedStatusProps> = ({ etchbotName }) => {
 
     const handleDownload = async (name: string, index: number) => {
         try {
-            const response = await axios.post(`${API_URL}/etchbot/${etchbotName}/download_zip`, {
-                drawing_index: index,
-            }, {
-                responseType: 'blob',
-            });
+            const response = await axios.post<Blob>(
+                `${API_URL}/etchbot/${etchbotName}/download_zip`,
+                { drawing_index: index },
+                { responseType: 'blob' }
+            );
 
             // Use the Blob directly from the response
             const url = window.URL.createObjectURL(response.data);
