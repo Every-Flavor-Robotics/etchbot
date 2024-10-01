@@ -48,16 +48,16 @@ const CompletedStatus: React.FC<CompletedStatusProps> = ({ etchbotName }) => {
     const handleDownload = async (name: string, index: number) => {
         try {
             const response = await axios.post(`${API_URL}/etchbot/${etchbotName}/download_zip`, {
-                drawing_index: index, // Pass the index instead of the name
+                drawing_index: index,
             }, {
-                responseType: 'blob', // Important to download files
+                responseType: 'blob',
             });
 
-            // Create a URL for the downloaded Blob
-            const url = window.URL.createObjectURL(new Blob([response.data as BlobPart])); // Cast response.data as BlobPart
+            // Use the Blob directly from the response
+            const url = window.URL.createObjectURL(response.data);
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `${name}.zip`); // Filename for download
+            link.setAttribute('download', `${name}.zip`);
             document.body.appendChild(link);
             link.click();
             link.remove();
