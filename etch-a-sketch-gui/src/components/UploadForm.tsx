@@ -25,7 +25,9 @@ const UploadForm: React.FC<UploadFormProps> = ({ etchbotName }) => {
         if (!file) return;
 
         const formData = new FormData();
-        formData.append("file", file);
+        // Replace spaces in the file name with underscores
+        const newFileName = file.name.replace(/ /g, "_");
+        formData.append("file", file, newFileName);
 
         setLoading(true);
         setSuccess(false);
