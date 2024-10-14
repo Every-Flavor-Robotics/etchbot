@@ -8,7 +8,7 @@ ipdb==0.13.13
 matplotlib==3.8.4
 networkx==3.2.1
 onnxruntime==1.17.3
-onnxruntime-gpu==1.17.1
+# onnxruntime-gpu==1.17.1
 opencv-python==4.10.0.82
 opencv-python-headless==4.9.0.80
 pandas==2.2.2
@@ -21,3 +21,4 @@ scikit-learn==1.4.1.post1
 scipy==1.12.0
 tqdm==4.66.4
 transitions==0.9.1
+vtracer==0.6.11

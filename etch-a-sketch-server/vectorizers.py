@@ -8,6 +8,7 @@ from PIL import Image
 from preprocessor_utils import Preprocessor
 
 from potrace import TURNPOLICY_MINORITY, Bitmap  # `potracer` library
+import vtracer
 
 
 class Vectorizer(Preprocessor):
@@ -88,5 +89,34 @@ class PotraceVectorizer(Vectorizer):
                 f'<path stroke="#000000" fill="None" fill-rule="evenodd" d="{"".join(parts)}"/>'
             )
             f.write("</svg>")
+
+        return output_path
+
+
+class VTracerVectorizer(Vectorizer):
+    """VTracerVectorizer uses vtracer to vectorize the input image."""
+
+    PARALLELIZABLE = True
+
+    def _process(self, input_path: Path, output_path: Path) -> Path:
+        """Process the input image and return the output image.py
+
+        Args:
+            image_path (Path): Path to the image to be processed
+            output_path (Path): Path to save the processed image
+
+        Returns:
+            Path: Path to the processed image, ready for the next step in the pipeline
+
+        """
+
+        super()._process(input_path, output_path)
+
+        # Confirm that the input image exists
+        if not input_path.exists():
+            raise FileNotFoundError(f"Image {input_path} not found.")
+
+        # Vectorize the image
+        vtracer.convert_image_to_svg_py(input_path, output_path, colormode="binary")
 
         return output_path
