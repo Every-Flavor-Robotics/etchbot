@@ -3,6 +3,7 @@ from pathlib import Path
 from click import secho
 import numpy as np
 from PIL import Image
+import re
 
 # Base class for all preprocessors
 from preprocessor_utils import Preprocessor
@@ -99,7 +100,7 @@ class VTracerVectorizer(Vectorizer):
     PARALLELIZABLE = True
 
     def _process(self, input_path: Path, output_path: Path) -> Path:
-        """Process the input image and return the output image.py
+        """Process the input image and return the output image.
 
         Args:
             image_path (Path): Path to the image to be processed
@@ -117,6 +118,49 @@ class VTracerVectorizer(Vectorizer):
             raise FileNotFoundError(f"Image {input_path} not found.")
 
         # Vectorize the image
-        vtracer.convert_image_to_svg_py(input_path, output_path, colormode="binary")
+        vtracer.convert_image_to_svg_py(
+            str(input_path), str(output_path), colormode="binary"
+        )
+
+        # Confirm that the output image exists
+        if not output_path.exists():
+            raise FileNotFoundError(f"Image {output_path} not found.")
+
+        # Read the SVG content
+        with open(output_path, "r", encoding="utf-8") as file:
+            svg_content = file.read()
+
+        svg_header_pattern = r"<svg([^>]*)>"
+        match = re.search(svg_header_pattern, svg_content)
+        if match:
+            svg_tag = match.group(0)
+            attributes = match.group(1)
+
+            # Extract width and height
+            width_match = re.search(r'width="([^"]+)"', attributes)
+            height_match = re.search(r'height="([^"]+)"', attributes)
+
+            if width_match and height_match:
+                width = width_match.group(1)
+                height = height_match.group(1)
+
+                # Remove any units from width and height (e.g., 'px')
+                width_value = re.match(r"(\d+(\.\d+)?)", width).group(1)
+                height_value = re.match(r"(\d+(\.\d+)?)", height).group(1)
+
+                # Add viewBox attribute to the <svg> tag
+                if "viewBox" not in attributes:
+                    new_svg_tag = (
+                        svg_tag[:-1] + f' viewBox="0 0 {width_value} {height_value}">'
+                    )
+                    svg_content = svg_content.replace(svg_tag, new_svg_tag, 1)
+
+                    # Write the modified SVG back to the file
+                    with open(output_path, "w", encoding="utf-8") as file:
+                        file.write(svg_content)
+            else:
+                raise ValueError("Could not find width and height in the SVG header.")
+        else:
+            raise ValueError("Could not find the <svg> tag in the SVG content.")
 
         return output_path
