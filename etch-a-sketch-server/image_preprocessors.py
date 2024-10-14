@@ -120,18 +120,42 @@ class AspectRatioPreprocessor(ImagePreprocessor):
         return img
 
     def resize(self, img: Image.Image) -> Image.Image:
-        """Resize the image to the correct aspect ratio."""
+        """Resize the image to the correct aspect ratio by padding."""
 
-        # Get the dimensions of the image
+        # Get the dimensions of the original image
         width, height = img.size
 
-        # Compute the new dimensions
-        new_width, new_height = self.compute_new_dimensions(width, height)
+        # Compute the new dimensions (desired output dimensions)
+        new_width, new_height = self.compute_new_padded_dimensions(width, height)
 
-        # Resize the image
-        img = img.resize((new_width, new_height), Image.ANTIALIAS)
+        # Create a new image with the desired dimensions and a background color (e.g., white)
+        new_img = Image.new(img.mode, (new_width, new_height), (255, 255, 255))
 
-        return img
+        # Calculate the position to paste the original image onto the new image (centered)
+        x = (new_width - width) // 2
+        y = (new_height - height) // 2
+
+        # Paste the original image onto the new image
+        new_img.paste(img, (x, y))
+
+        return new_img
+
+    def compute_new_padded_dimensions(self, width: int, height: int) -> tuple[int, int]:
+        """Compute the new dimensions of the image for padding to match the desired aspect ratio."""
+
+        # Calculate the aspect ratio of the original image
+        original_aspect_ratio = width / height
+
+        if original_aspect_ratio >= self.aspect_ratio:
+            # Image is wider than or equal to desired aspect ratio
+            new_width = width
+            new_height = int(round(width / self.aspect_ratio))
+        else:
+            # Image is taller than desired aspect ratio
+            new_width = int(round(height * self.aspect_ratio))
+            new_height = height
+
+        return new_width, new_height
 
 
 class ColorbookPreprocessor(ImagePreprocessor):
