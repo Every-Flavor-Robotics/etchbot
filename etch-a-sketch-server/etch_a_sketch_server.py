@@ -52,6 +52,10 @@ def upload_file(etchbot_name):
 
         etchbot = etchbot_store.get_robot_by_name(etchbot_name)
 
+        # Check if the request contains a pipeline field and a framerate field, optional
+        pipeline = request.form.get("pipeline", None)
+        framerate = int(request.form.get("framerate", None))
+
         # Add the time
         save_path = (
             UPLOAD_DIR / etchbot_name / f"{time.strftime('%m%d%H%M%S')}_{file.filename}"
@@ -60,7 +64,7 @@ def upload_file(etchbot_name):
 
         file_name = file.filename.split(".")[0]
         # Create a drawing and hand off to the Etchbot
-        drawing = Drawing(file_name, save_path)
+        drawing = Drawing(file_name, save_path, pipeline=pipeline, framerate=framerate)
         etchbot.add_drawing(drawing)
 
         # Start file processing or any other logic related to the specific etchbot

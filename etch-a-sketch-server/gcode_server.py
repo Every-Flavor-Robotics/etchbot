@@ -126,10 +126,13 @@ class EmptyGCode(GCode):
 class Drawing:
     ARTIFACTS_DIR = Path("artifacts")
 
-    def __init__(self, name: str, path: pathlib.Path):
+    def __init__(self, name: str, path: pathlib.Path, pipeline=None, framerate=None):
         self.name = name
 
         self.path = path
+
+        self.pipeline = pipeline
+        self.framerate = framerate
 
         # Confirm that the file exists
         if not self.path.exists():
@@ -160,7 +163,13 @@ class Drawing:
             file_extension = self.path.suffix.lower()
             if file_extension in SUPPORTED_FILE_TYPES:
                 processing_dir = PROCESSING_DIR / self.path.stem
-                output = run_pipeline(self.path, processing_dir, copy=False)
+                output = run_pipeline(
+                    self.path,
+                    processing_dir,
+                    copy=False,
+                    pipeline=self.pipeline,
+                    framerate=self.framerate,
+                )
 
         # Do nothing if file type is not supported
         except Exception as e:

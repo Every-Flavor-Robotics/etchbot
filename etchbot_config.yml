@@ -8,11 +8,12 @@ server:
   stream_port: 5005
   max_workers: 12
 
-video_generation:
-  frame_rate: 8
-
 # Drawing parameters
 drawing:
+  video_generation:
+    frame_rate: 8
+  # Options are "potrace" or "vtracer"
+  pipeline: "vtracer"
   width: 130
   height: 89.375
   feed_rate: 14000
