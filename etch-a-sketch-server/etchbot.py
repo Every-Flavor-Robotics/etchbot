@@ -471,6 +471,8 @@ class EtchBot:
 
             self._remove_gcode()
 
+            print("Picture captured.")
+
             # Signal that the picture has been captured, robot is ready to draw
             self.post_drawing_actions_complete()
 
