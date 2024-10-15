@@ -118,9 +118,7 @@ class VTracerVectorizer(Vectorizer):
             raise FileNotFoundError(f"Image {input_path} not found.")
 
         # Vectorize the image
-        vtracer.convert_image_to_svg_py(
-            str(input_path), str(output_path), colormode="binary"
-        )
+        vtracer.convert_image_to_svg_py(input_path, output_path, colormode="binary")
 
         # Confirm that the output image exists
         if not output_path.exists():
@@ -130,6 +128,7 @@ class VTracerVectorizer(Vectorizer):
         with open(output_path, "r", encoding="utf-8") as file:
             svg_content = file.read()
 
+        # Use regex to find the <svg> tag and extract width and height
         svg_header_pattern = r"<svg([^>]*)>"
         match = re.search(svg_header_pattern, svg_content)
         if match:
@@ -154,10 +153,32 @@ class VTracerVectorizer(Vectorizer):
                         svg_tag[:-1] + f' viewBox="0 0 {width_value} {height_value}">'
                     )
                     svg_content = svg_content.replace(svg_tag, new_svg_tag, 1)
+                    svg_tag = new_svg_tag  # Update svg_tag with the new tag
 
-                    # Write the modified SVG back to the file
-                    with open(output_path, "w", encoding="utf-8") as file:
-                        file.write(svg_content)
+                # Insert a <path> element to add borders around the viewbox
+                # Find the position to insert the <path> element (after the opening <svg> tag)
+                svg_tag_end_index = (
+                    svg_content.find(">") + 1
+                )  # +1 to include the '>' character
+
+                # Define the path data for the border
+                path_data = f"M 0 0 H {width_value} V {height_value} H 0 Z"
+
+                # Define the <path> element with a stroke (border) and no fill
+                path_element = (
+                    f'\n  <path d="{path_data}" stroke="black" fill="none"/>\n'
+                )
+
+                # Insert the <path> element into the SVG content
+                svg_content = (
+                    svg_content[:svg_tag_end_index]
+                    + path_element
+                    + svg_content[svg_tag_end_index:]
+                )
+
+                # Write the modified SVG back to the file
+                with open(output_path, "w", encoding="utf-8") as file:
+                    file.write(svg_content)
             else:
                 raise ValueError("Could not find width and height in the SVG header.")
         else:
