@@ -159,20 +159,20 @@ class VTracerVectorizer(Vectorizer):
             root.set("viewBox", f"0 0 {width_value} {height_value}")
 
         # Create the <path> element
-        path_data = f"M 0 0 H {width_value} V {height_value} H 0 Z"
-        path_element = ET.Element(
-            "path", {"d": path_data, "stroke": "black", "fill": "none"}
-        )
+        # path_data = f"M 0 0 H {width_value} V {height_value} H 0 Z"
+        # path_element = ET.Element(
+        #     "path", {"d": path_data, "stroke": "black", "fill": "none"}
+        # )
 
-        # Insert the <path> element at the appropriate position
-        # Typically, after any <defs> element and before other graphical content
-        insert_index = 0
-        for i, child in enumerate(list(root)):
-            if child.tag.endswith("defs"):
-                insert_index = i + 1
-                break
+        # # Insert the <path> element at the appropriate position
+        # # Typically, after any <defs> element and before other graphical content
+        # insert_index = 0
+        # for i, child in enumerate(list(root)):
+        #     if child.tag.endswith("defs"):
+        #         insert_index = i + 1
+        #         break
 
-        root.insert(insert_index, path_element)
+        # root.insert(insert_index, path_element)
 
         # Write the modified SVG back to the file
         tree.write(output_path, encoding="utf-8", xml_declaration=True)
