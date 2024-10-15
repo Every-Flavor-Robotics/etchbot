@@ -165,6 +165,7 @@ void home()
   up_down.loop();
   delay(1000);
   float homing_speed = 1.0;
+  float precision_speed = 0.2;
 
   left_right.set_control_mode(MotorGo::ControlMode::VelocityOpenLoop);
   up_down.set_control_mode(MotorGo::ControlMode::VelocityOpenLoop);
@@ -177,53 +178,184 @@ void home()
     delay(1);
   }
 
-  float target = RAD_PER_MM * (ORIGIN_X + 1.0) + LEFT_RIGHT_BACKLASH_RAD;
+  // How far from the corner to inset the zero
+  float inset = 6;
+
   left_right.enable();
+  // Move into the edge of the etch a sketch to zero
+  float target = -RAD_PER_MM * (inset + 2);
+  //   Move left to the edge
+  left_right.set_target_velocity(-homing_speed);
+  while (left_right.get_position() > target)
+  {
+    left_right.loop();
+  }
+  left_right.set_target_velocity(0.0);
+  //   Loop a few times to update encoder readings
+  for (int i = 0; i < 1000; i++)
+  {
+    left_right.loop();
+    delayMicroseconds(10);
+  }
+  //   We've lost the zero since we're slipping at the edge, reset
+  left_right.zero_position();
+  left_right.loop();
+
+  // Move past the zero point by 1.5 mm
+  target = RAD_PER_MM * (inset + LEFT_RIGHT_BACKLASH_MM + 1.);
+  // Move right
+  left_right.set_target_velocity(1.5 * homing_speed);
   while (left_right.get_position() < target)
   {
     left_right.loop();
-    // Move right
-    left_right.set_target_velocity(homing_speed);
   }
   left_right.set_target_velocity(0.0);
   left_right.loop();
 
-  target = ORIGIN_X;
+  // Move left quickly towards the home
+  target = RAD_PER_MM * inset + 0.5;
+  left_right.set_target_velocity(-homing_speed);
   while (left_right.get_position() > target)
   {
     left_right.loop();
-    // Move left
-    left_right.set_target_velocity(-homing_speed);
   }
   left_right.set_target_velocity(0.0);
+  left_right.loop();
+
+  // Slow down for high precision for final homing
+  target = RAD_PER_MM * inset;
+  left_right.set_target_velocity(-precision_speed);
+  while (left_right.get_position() > target)
+  {
+    left_right.loop();
+  }
   left_right.disable();
   left_right.loop();
 
   //   Up down homing
-  target = RAD_PER_MM * (ORIGIN_Y + 1.0) + UP_DOWN_BACKLASH_RAD;
+
   up_down.enable();
+  //   Move into the edge of the etch a sketch to zero
+  target = -RAD_PER_MM * (inset + 2);
+  //   Move down to the edge
+  up_down.set_target_velocity(-homing_speed);
+  while (up_down.get_position() > target)
+  {
+    up_down.loop();
+  }
+  up_down.set_target_velocity(0.0);
+  //   Loop a few times to update encoder readings
+  for (int i = 0; i < 1000; i++)
+  {
+    up_down.loop();
+    delayMicroseconds(10);
+  }
+  //   We've lost the zero since we're slipping at the edge, reset
+  up_down.zero_position();
+  up_down.loop();
+
+  // Move past the zero point by 1.5 mm
+  target = RAD_PER_MM * (inset + UP_DOWN_BACKLASH_MM + 1.);
+  // Move up
+  up_down.set_target_velocity(1.5 * homing_speed);
   while (up_down.get_position() < target)
   {
     up_down.loop();
-    // Move up
-    up_down.set_target_velocity(homing_speed);
   }
   up_down.set_target_velocity(0.0);
   up_down.loop();
 
-  target = ORIGIN_Y;
+  // Move down quickly towards the home
+  target = RAD_PER_MM * inset + 0.5;
+  up_down.set_target_velocity(-homing_speed);
   while (up_down.get_position() > target)
   {
     up_down.loop();
-    // Move down
-    up_down.set_target_velocity(-homing_speed);
   }
   up_down.set_target_velocity(0.0);
+  up_down.loop();
+
+  // Slow down for high precision for final homing
+  target = RAD_PER_MM * inset;
+  up_down.set_target_velocity(-precision_speed);
+  while (up_down.get_position() > target)
+  {
+    up_down.loop();
+  }
   up_down.disable();
   up_down.loop();
 
   Serial.println("Homing complete");
 }
+
+// void home()
+// {
+//   Serial.println("Starting homing procedure");
+//   left_right.disable();
+//   up_down.disable();
+//   left_right.loop();
+//   up_down.loop();
+//   delay(1000);
+//   float homing_speed = 1.0;
+
+//   left_right.set_control_mode(MotorGo::ControlMode::VelocityOpenLoop);
+//   up_down.set_control_mode(MotorGo::ControlMode::VelocityOpenLoop);
+
+//   //   Update position first
+//   for (int i = 0; i < 1000; i++)
+//   {
+//     left_right.loop();
+//     up_down.loop();
+//     delay(1);
+//   }
+
+//   float target = RAD_PER_MM * (ORIGIN_X + 1.0) + LEFT_RIGHT_BACKLASH_RAD;
+//   left_right.enable();
+//   while (left_right.get_position() < target)
+//   {
+//     left_right.loop();
+//     // Move right
+//     left_right.set_target_velocity(homing_speed);
+//   }
+//   left_right.set_target_velocity(0.0);
+//   left_right.loop();
+
+//   target = ORIGIN_X;
+//   while (left_right.get_position() > target)
+//   {
+//     left_right.loop();
+//     // Move left
+//     left_right.set_target_velocity(-homing_speed);
+//   }
+//   left_right.set_target_velocity(0.0);
+//   left_right.disable();
+//   left_right.loop();
+
+//   //   Up down homing
+//   target = RAD_PER_MM * (ORIGIN_Y + 1.0) + UP_DOWN_BACKLASH_RAD;
+//   up_down.enable();
+//   while (up_down.get_position() < target)
+//   {
+//     up_down.loop();
+//     // Move up
+//     up_down.set_target_velocity(homing_speed);
+//   }
+//   up_down.set_target_velocity(0.0);
+//   up_down.loop();
+
+//   target = ORIGIN_Y;
+//   while (up_down.get_position() > target)
+//   {
+//     up_down.loop();
+//     // Move down
+//     up_down.set_target_velocity(-homing_speed);
+//   }
+//   up_down.set_target_velocity(0.0);
+//   up_down.disable();
+//   up_down.loop();
+
+//   Serial.println("Homing complete");
+// }
 
 void draw_pre_setup()
 {
@@ -240,7 +372,7 @@ void draw_pre_setup()
   left_right_velocity_pid_params.i = 0.0;
   left_right_velocity_pid_params.d = 0.0;
   left_right_velocity_pid_params.lpf_time_constant = 0.00;
-  left_right_ff_accel_gain = 0.028 / 100;
+  left_right_ff_accel_gain = 0.026 / 100;
   left_right_ff_velocity_gain = 0.011;
 
   left_right_velocity_pid.P = left_right_velocity_pid_params.p;
@@ -252,7 +384,7 @@ void draw_pre_setup()
   up_down_velocity_pid_params.i = 0.0;
   up_down_velocity_pid_params.d = 0.0;
   up_down_velocity_pid_params.lpf_time_constant = 0.00;
-  up_down_ff_accel_gain = 0.028 / 100;
+  up_down_ff_accel_gain = 0.025 / 100;
   up_down_ff_velocity_gain = 0.011;
 
   up_down_velocity_pid.P = up_down_velocity_pid_params.p;
@@ -344,12 +476,13 @@ void draw_setup()
       &loop_foc_task, /* Task handle to keep track of created task */
       1);             /* pin task to core 1 */
 
-  //   delay(3000);
+  // Let loop start
+  delay(1500);
 
   //   state.is_complete = false;
 
-  //   left_right.zero_position();
-  //   up_down.zero_position();
+  left_right.zero_position();
+  up_down.zero_position();
   state.is_complete = true;
 
   previous_position_x = left_right.get_position();
@@ -498,6 +631,7 @@ bool draw_loop()
     // Print final position in rad and mm
     // Serial.println("Final position: " + String(current_command->x) + ", " +
     //                String(current_command->y) + " mm");
+    // delay(2000);
 
     // Serial.println("Getting next command!");
 
