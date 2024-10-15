@@ -112,8 +112,8 @@ def run_pipeline(
         gcode_filters = [
             GCodeCleaner(),
             RemoveZ(),
-            # ResolutionReducer(1.2),
-            ColinearFilter(0.996),
+            ResolutionReducer(0.2)
+            ColinearFilter(0.998),
             TSPOptimizer(
                 (
                     Config().get("drawing.origin_x", 0.0),
@@ -143,8 +143,8 @@ def run_pipeline(
         gcode_filters = [
             GCodeCleaner(),
             RemoveZ(),
-            # ResolutionReducer(1.2),
-            ColinearFilter(0.996),
+            ResolutionReducer(0.2)
+            ColinearFilter(0.998),
             TSPOptimizer(
                 (
                     Config().get("drawing.origin_x", 0.0),
