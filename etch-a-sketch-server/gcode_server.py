@@ -87,6 +87,7 @@ class GCode:
             return "END\n"
 
         end_line = start_line + num_lines
+        print(f"Retrieving lines {start_line} to {end_line}")
 
         # Retrieve the requested lines
         gcode_lines = self.gcode_lines[start_line:end_line]
