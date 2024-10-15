@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include <ArduinoOTA.h>
-#include <ESPmDNS.h>
+#include <ESPmDNS.h>  // Ensure this library is included
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <esp_task_wdt.h>
@@ -36,17 +36,13 @@ MotorGo::PIDParameters erasing_position_controller_parameters;
 MotorGo::PIDParameters holding_position_controller_parameters;
 PIDController position_controller(0.0, 0.0, 0.0, 0.0, 0.0);
 
-// configure wifi communications
+// Configure WiFi communications
 bool motors_enabled = false;
 ESPWifiConfig::Configurable<bool> enable_motors(motors_enabled, "/enable",
                                                 "Enable motors");
 
 unsigned long last_time = micros();
 unsigned long hold_time = 2.5 * 1e6;
-
-float zero_position = -0.06;
-float erase_position_1 = PI;
-float erase_position_2 = PI / 3;
 
 std::atomic<float> target_pos{0.0};
 std::atomic<float> erase_begin{false};
@@ -104,6 +100,13 @@ float get_target(float cur_angle, float target_angle, int direction)
 {
   if (direction == 1)
   {
+    // Work in the negative direction, until we're less than the target
+    // This ensures that we will never be more than one rotation away
+    while (target_angle > cur_angle)
+    {
+      target_angle -= 2 * PI;
+    }
+    // Go forward until we're greater than the target
     while (target_angle < cur_angle)
     {
       target_angle += 2 * PI;
@@ -111,6 +114,11 @@ float get_target(float cur_angle, float target_angle, int direction)
   }
   else
   {
+    while (target_angle < cur_angle)
+    {
+      target_angle += 2 * PI;
+    }
+
     while (target_angle > cur_angle)
     {
       target_angle -= 2 * PI;
@@ -119,20 +127,23 @@ float get_target(float cur_angle, float target_angle, int direction)
   return target_angle;
 }
 
+float zero_position = get_angle_absolute(PI / 2.0 + 0.14);
+float erase_position_1 = get_angle_absolute(11 * PI / 12.0 + zero_position);
+float erase_position_2 = get_angle_absolute(PI / 12.0 + zero_position);
+
 // blue -> 41
 // yellow -> 42
 uint8_t input_pin = 41;
 uint8_t output_pin = 42;
+
 void setup()
 {
   Serial.begin(5000000);
 
-  //   delay(5000);
-
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
-  //   Try connecting 5 times, then give up
+  // Try connecting 5 times, then give up
   int connect_attempts = 0;
   while (WiFi.status() != WL_CONNECTED && connect_attempts < 5)
   {
@@ -140,6 +151,17 @@ void setup()
     Serial.print(".");
     connect_attempts++;
   }
+
+  // Initialize mDNS with the desired hostname
+  if (!MDNS.begin("claude-monetch-eraser"))
+  {
+    Serial.println("Error starting mDNS responder!");
+    while (1)
+    {
+      delay(1000);
+    }
+  }
+  Serial.println("mDNS responder started");
 
   ArduinoOTA
       .onStart(
@@ -175,7 +197,8 @@ void setup()
               Serial.println("End Failed");
           });
 
-  ArduinoOTA.setHostname("etchbot-1-eraser");
+  // Set the OTA hostname to match the mDNS hostname
+  ArduinoOTA.setHostname("claude-monetch-eraser");
 
   ArduinoOTA.begin();
 
@@ -210,7 +233,7 @@ void setup()
   erasing_position_controller_parameters.p = 3.5;
   erasing_position_controller_parameters.d = 0.5;
 
-  //   Set parameters for holding mode
+  // Set parameters for holding mode
   position_controller.P = holding_position_controller_parameters.p;
   position_controller.I = holding_position_controller_parameters.i;
   position_controller.D = holding_position_controller_parameters.d;
@@ -252,15 +275,14 @@ void setup()
       &loop_foc_task, /* Task handle to keep track of created task */
       1);             /* pin task to core 1 */
 
-  delay(1000);
+  delay(2000);
 
-  //   Find the shortest distance to zero position, for holding
-  float target_forward =
-      get_target(tilt_motor.get_position(), zero_position, 1);
-  float target_backward =
-      get_target(tilt_motor.get_position(), zero_position, -1);
+  // Find the shortest distance to zero position, for holding
+  float cur_position = tilt_motor.get_position();
+  float target_forward = get_target(cur_position, zero_position, 1);
+  float target_backward = get_target(cur_position, zero_position, -1);
 
-  if (abs(target_forward) < abs(target_backward))
+  if (abs(target_forward - cur_position) < abs(target_backward - cur_position))
   {
     target_pos = target_forward;
   }
@@ -269,8 +291,19 @@ void setup()
     target_pos = target_backward;
   }
 
+  Serial.print("Cur: ");
+  Serial.print(cur_position);
+  Serial.print(" Forward: ");
+  Serial.print(target_forward);
+  Serial.print(" Backward: ");
+  Serial.print(target_backward);
+  Serial.print(" Target: ");
+  Serial.println(target_pos);
+
   Serial.println(target_pos);
   enable_flag.store(true);
+
+  delay(4000);
 }
 
 void loop_foc(void* pvParameters)
@@ -355,7 +388,7 @@ void loop()
       {
         zeroing = true;
         zero_start_time = micros();
-        target_pos = 0.0;
+        target_pos = get_target(angle, zero_position, -1);
         position_controller.reset();
       }
 
@@ -387,11 +420,19 @@ void loop()
       if (current_pos)
       {
         target_pos = get_target(angle, erase_position_1, 1);
+        Serial.println("Erasing position 1");
+        Serial.println("Current position: " + String(angle));
+        Serial.println("Target position (raw): " + String(erase_position_1));
+        Serial.println("Target position: " + String(target_pos));
         current_pos = false;
       }
       else
       {
         target_pos = get_target(angle, erase_position_2, -1);
+        Serial.println("Erasing position 2");
+        Serial.println("Current position: " + String(angle));
+        Serial.println("Target position (raw): " + String(erase_position_2));
+        Serial.println("Target position: " + String(target_pos));
         current_pos = true;
         cur_cycle_count++;
 
