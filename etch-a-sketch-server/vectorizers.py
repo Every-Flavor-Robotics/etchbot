@@ -4,6 +4,7 @@ from click import secho
 import numpy as np
 from PIL import Image
 import re
+import xml.etree.ElementTree as ET
 
 # Base class for all preprocessors
 from preprocessor_utils import Preprocessor
@@ -126,65 +127,54 @@ class VTracerVectorizer(Vectorizer):
         if not output_path.exists():
             raise FileNotFoundError(f"Image {output_path} not found.")
 
-        # Read the SVG content
-        with open(output_path, "r", encoding="utf-8") as file:
-            svg_content = file.read()
+        # Parse the SVG file
+        tree = ET.parse(output_path)
+        root = tree.getroot()
 
-        # Use regex to find the <svg> tag and extract width and height
-        import re
+        # Define the SVG namespace
+        ns = {"svg": "http://www.w3.org/2000/svg"}
+        ET.register_namespace("", ns["svg"])  # Prevent namespace prefixes in the output
 
-        svg_header_pattern = r"<svg[^>]*>"
-        match = re.search(svg_header_pattern, svg_content)
-        if match:
-            svg_tag = match.group(0)
-            attributes = match.group(0)  # Include the entire <svg ...> tag
+        # Extract width and height
+        width = root.get("width")
+        height = root.get("height")
 
-            # Extract width and height
-            width_match = re.search(r'width="([^"]+)"', attributes)
-            height_match = re.search(r'height="([^"]+)"', attributes)
+        if width is None or height is None:
+            raise ValueError("Could not find width and height in the SVG root element.")
 
-            if width_match and height_match:
-                width = width_match.group(1)
-                height = height_match.group(1)
+        # Remove units from width and height (e.g., 'px')
+        width_value_match = re.match(r"(\d+(\.\d+)?)", width)
+        height_value_match = re.match(r"(\d+(\.\d+)?)", height)
 
-                # Remove any units from width and height (e.g., 'px')
-                width_value = re.match(r"(\d+(\.\d+)?)", width).group(1)
-                height_value = re.match(r"(\d+(\.\d+)?)", height).group(1)
+        if not width_value_match or not height_value_match:
+            raise ValueError(
+                "Width and height attributes are not in the correct format."
+            )
 
-                # Add viewBox attribute to the <svg> tag if it's not already present
-                if "viewBox" not in attributes:
-                    # Insert the viewBox attribute before the closing '>'
-                    new_svg_tag = (
-                        svg_tag[:-1] + f' viewBox="0 0 {width_value} {height_value}">'
-                    )
-                    # Replace the old <svg> tag with the new one in the SVG content
-                    svg_content = svg_content.replace(svg_tag, new_svg_tag, 1)
-                    svg_tag = new_svg_tag  # Update svg_tag with the new tag
+        width_value = width_value_match.group(1)
+        height_value = height_value_match.group(1)
 
-                # Find the end position of the opening <svg> tag
-                svg_tag_end_index = match.end()
+        # Add viewBox attribute if not present
+        if "viewBox" not in root.attrib:
+            root.set("viewBox", f"0 0 {width_value} {height_value}")
 
-                # Define the path data for the border
-                path_data = f"M 0 0 H {width_value} V {height_value} H 0 Z"
+        # Create the <path> element
+        path_data = f"M 0 0 H {width_value} V {height_value} H 0 Z"
+        path_element = ET.Element(
+            "path", {"d": path_data, "stroke": "black", "fill": "none"}
+        )
 
-                # Define the <path> element with a stroke (border) and no fill
-                path_element = (
-                    f'\n  <path d="{path_data}" stroke="black" fill="none"/>\n'
-                )
+        # Insert the <path> element at the appropriate position
+        # Typically, after any <defs> element and before other graphical content
+        insert_index = 0
+        for i, child in enumerate(list(root)):
+            if child.tag.endswith("defs"):
+                insert_index = i + 1
+                break
 
-                # Insert the <path> element into the SVG content
-                svg_content = (
-                    svg_content[:svg_tag_end_index]
-                    + path_element
-                    + svg_content[svg_tag_end_index:]
-                )
+        root.insert(insert_index, path_element)
 
-                # Write the modified SVG back to the file
-                with open(output_path, "w", encoding="utf-8") as file:
-                    file.write(svg_content)
-            else:
-                raise ValueError("Could not find width and height in the SVG header.")
-        else:
-            raise ValueError("Could not find the <svg> tag in the SVG content.")
+        # Write the modified SVG back to the file
+        tree.write(output_path, encoding="utf-8", xml_declaration=True)
 
         return output_path
