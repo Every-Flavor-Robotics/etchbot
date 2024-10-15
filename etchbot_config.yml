@@ -16,11 +16,10 @@ drawing:
   pipeline: "vtracer"
   width: 130
   height: 89.375
-  feed_rate: 14000
-  acceleration: 14000
+  feed_rate: 12500
   # Zero position in mm
-  origin_x: 1.5
-  origin_y: 3.5
+  origin_x: 4.5
+  origin_y: 4.0
 
 robot:
   # 18:81
