@@ -112,7 +112,7 @@ def run_pipeline(
         gcode_filters = [
             GCodeCleaner(),
             RemoveZ(),
-            ResolutionReducer(0.2)
+            ResolutionReducer(0.2),
             ColinearFilter(0.998),
             TSPOptimizer(
                 (
@@ -143,7 +143,7 @@ def run_pipeline(
         gcode_filters = [
             GCodeCleaner(),
             RemoveZ(),
-            ResolutionReducer(0.2)
+            ResolutionReducer(0.2),
             ColinearFilter(0.998),
             TSPOptimizer(
                 (
