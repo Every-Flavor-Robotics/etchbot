@@ -118,7 +118,9 @@ class VTracerVectorizer(Vectorizer):
             raise FileNotFoundError(f"Image {input_path} not found.")
 
         # Vectorize the image
-        vtracer.convert_image_to_svg_py(input_path, output_path, colormode="binary")
+        vtracer.convert_image_to_svg_py(
+            str(input_path), str(output_path), colormode="binary"
+        )
 
         # Confirm that the output image exists
         if not output_path.exists():
