@@ -17,7 +17,7 @@ drawing:
   width: 130
   height: 89.375
   feed_rate: 14000
-  acceleration: 16000
+  acceleration: 14000
   # Zero position in mm
   origin_x: 1.5
   origin_y: 3.5
@@ -27,8 +27,8 @@ robot:
   gear_ratio: 0.22222222222
   # 0.1858 mm per rad
   mm_to_knob_rad: 0.1858
-  left_right_backlash_mm: 2.0
-  up_down_backlash_mm: 2.6
+  left_right_backlash_mm: 1.45
+  up_down_backlash_mm: 1.87
   backlash_compensation_radpersec: 130.0
   backlash_acceleration: 9000
   max_acceleration: 25000
