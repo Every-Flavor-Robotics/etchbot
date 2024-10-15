@@ -34,7 +34,24 @@ void setup()
   Serial.begin(5000000);
 
   erase_pre_setup();
+
+  // Connect to Wifi
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  unsigned long wifi_start_time = millis();
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    if (millis() - wifi_start_time > 15000)
+    {
+      Serial.println("Failed to connect to WiFi, restarting ESP");
+      esp_restart();
+    }
+    delay(1000);
+    Serial.println("Connecting to WiFi..");
+  }
+
   draw_pre_setup();
+
+  delay(5000);
 
   int return_code = 0;
   String address = host + "/connect";
@@ -155,10 +172,12 @@ void loop()
     {
       http.begin(address.c_str());
       http.addHeader("Content-Type", "application/json");
+      http.setTimeout(
+          30000);  // Set timeout to 10,000 milliseconds (10 seconds)
       return_code = http.POST(body);
       http.end();
 
-      Serial.println("Server response: " + String(return_code));
+      delay(5000);
     }
 
     // Reset the ESP32
