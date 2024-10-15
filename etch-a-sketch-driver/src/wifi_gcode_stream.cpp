@@ -20,6 +20,8 @@ GCode::WifiGCodeStream::WifiGCodeStream(String server_ip, int max_buffer_len)
     cur_buffer->lines.push_back("");
     next_buffer->lines.push_back("");
   }
+
+  cur_line_number = -max_buffer_len;
 }
 
 void GCode::WifiGCodeStream::init()
@@ -84,10 +86,19 @@ void GCode::WifiGCodeStream::loop()
     if (next_buffer->len == 0 && !request_sent)
     {
       // Send a request to the server for the next buffer
-      client.print("GET /gcode?lines=" + String(max_buffer_len) + " HTTP/1.1");
+      size_t write_data =
+          client.print("GET /gcode?lines=" + String(max_buffer_len) +
+                       "&start_line=" + String(cur_line_number) + " HTTP/1.1");
+
       //   Serial.println("Request sent for " + String(max_buffer_len) + "
       //   lines");
-      request_sent = true;
+      if (write_data > 0)
+      {
+        // client.println();
+        request_sent = true;
+        request_start_time =
+            millis();  // Record the time when the request was sent
+      }
     }
 
     while (client.available() > 0 && next_buffer->len < max_buffer_len)
@@ -95,6 +106,8 @@ void GCode::WifiGCodeStream::loop()
       char c;
 
       client.readBytes(&c, 1);
+      request_start_time =
+          millis();  // Reset the timeout since data was received
       // If not a new line, we're not done reading the line
       //  Add the character to the next line and continue
       if (c != '\n')
@@ -135,7 +148,50 @@ void GCode::WifiGCodeStream::loop()
       request_sent = false;
     }
 
-    //   Check if the next buffer is ready
+    // Check for timeout
+    if (request_sent)
+    {
+      unsigned long elapsed = millis() - request_start_time;
+      if (elapsed > TIMEOUT_DURATION)
+      {
+        // Handle timeout
+        Serial.println("Timeout waiting for response");
+        client.stop();
+        request_sent = false;
+        next_buffer->len = 0;  // Clear the buffer to avoid partial data
+        retry_count++;
+
+        if (retry_count <= MAX_RETRIES)
+        {
+          // Retry sending the request
+          Serial.println("Retrying request, attempt " + String(retry_count));
+          // Reconnect to the server
+          if (!client.connect(server_ip.c_str(), socket_port))
+          {
+            Serial.println("Failed to reconnect to server");
+            // Optional: Implement reconnection attempts or delays here
+          }
+          else
+          {
+            // Reset retry count and timeout counter
+            retry_count = 0;
+            request_start_time = millis();
+          }
+        }
+        else
+        {
+          // Maximum retries reached, handle accordingly
+          Serial.println("Maximum retries reached. Aborting.");
+          // Set appropriate flags or take necessary actions
+          gcode_finished = true;  // Stop further processing
+          retry_count = 0;        // Reset retry count for future operations
+
+          // Optional: Implement further error handling here
+        }
+      }
+    }
+
+    // Check if the next buffer is ready
     //   Either the buffer is full or the GCode file is finished
     if ((next_buffer->len == max_buffer_len || gcode_finished) &&
         !next_buffer_ready)
@@ -153,7 +209,8 @@ void GCode::WifiGCodeStream::loop()
     GCodeBuffer *temp = cur_buffer;
     cur_buffer = next_buffer;
 
-    // Reset next buffer
+    // Reset next buffer and increment the line number to get the next batch
+    cur_line_number += max_buffer_len;
     next_buffer = temp;
     next_buffer_ready = false;
     next_buffer->len = 0;

@@ -49,5 +49,10 @@ class WifiGCodeStream : public GCodeStream
   bool server_ready();
   bool ready_for_next_gcode = false;
   bool request_sent = false;
+  long request_start_time = 0;
+  long TIMEOUT_DURATION = 15000;
+  int cur_line_number = 0;
+  size_t retry_count = 0;
+  size_t MAX_RETRIES = 10;
 };
 }  // namespace GCode
