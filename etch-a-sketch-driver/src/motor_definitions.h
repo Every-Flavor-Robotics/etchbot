@@ -41,7 +41,7 @@ const MotorGo::MotorConfiguration GARTTLeftEtch1(11,        // pole_pairs
 );
 
 const MotorGo::MotorConfiguration GARTTRightEtch1(11,        // pole_pairs
-                                                  400,       // kv
+                                                  390,       // kv
                                                   0.1088f,   // phase_resistance
                                                   NOT_SET,   // phase_inductance
                                                   4.5,       // voltage_limit
