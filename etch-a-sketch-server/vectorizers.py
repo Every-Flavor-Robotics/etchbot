@@ -158,7 +158,7 @@ class VTracerVectorizer(Vectorizer):
         if "viewBox" not in root.attrib:
             root.set("viewBox", f"0 0 {width_value} {height_value}")
 
-        Create the <path> element
+        # Create the <path> element
         path_data = f"M 0 0 H {width_value} V {height_value} H 0 Z"
         path_element = ET.Element(
             "path", {"d": path_data, "stroke": "black", "fill": "none"}
