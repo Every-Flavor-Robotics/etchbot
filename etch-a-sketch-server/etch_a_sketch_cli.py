@@ -126,7 +126,7 @@ def run_pipeline(
         video_splitters = [FFmpegSplitter(framerate)]
 
         preprocessors = [
-            AspectRatioPreprocessor(16 / 11, resize=True),
+            AspectRatioPreprocessor(16 / 11),
         ]
         vectorizers = [VTracerVectorizer()]
         gcode_converters = [
