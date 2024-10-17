@@ -476,3 +476,54 @@ class ZeroShifter(GCodeFilter):
         print(f"Shifted {count} points to the new origin {self.new_origin}.")
 
         return output_path
+
+class StartAtOrigin(GCodeFilter):
+    """ StartAtOrigin adds a G0 jump to the origin at the beginning of the file. """
+
+    PARALLELIZABLE = True
+
+    def __init__(self, origin: tuple[float, float] = (0, 0)):
+        """Initialize the StartAtOrigin with the origin.
+
+        Args:
+            origin (tuple): Origin point (x, y) in mm
+        """
+        super().__init__()
+
+        self.origin = origin
+
+    def _process(self, input_path: Path, output_path: Path) -> Path:
+        """Process the input gcode file and return the output gcode file with a jump to the origin at the beginning.
+
+        Args:
+            input_path (Path): Path to the GCode file to be processed
+            output_path (Path): Path to save the processed GCode file
+
+        Returns:
+        """
+
+        super()._process(input_path, output_path)
+
+        with open(input_path, "r") as f:
+            lines = f.readlines()
+
+        new_lines = []
+
+        # Add lines until the first G0 or G1 command
+        while len(lines) > 0:
+            command, args = self.decode_line(line)
+            if command in ["G0", "G1"]:
+                # Exit to add the origin
+                break
+
+            new_lines.append(lines.pop(0))
+
+        new_lines.append(f"G0 X{self.origin[0]} Y{self.origin[1]}\n")
+
+        # Add the rest of the lines
+        new_lines += lines
+
+        with open(output_path, "w") as f:
+            f.writelines(new_lines)
+
+        return output_path

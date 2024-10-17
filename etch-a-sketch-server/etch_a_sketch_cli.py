@@ -33,6 +33,7 @@ from gcode_filters import (
     GCodeCleaner,
     RemoveZ,
     GCodeFilter,
+    StartAtOrigin
 )
 
 counter = 0
@@ -120,6 +121,10 @@ def run_pipeline(
                     Config().get("drawing.origin_y", 0.0),
                 )
             ),
+            StartAtOrigin(
+                Config().get("drawing.origin_x", 0.0),
+                Config().get("drawing.origin_y", 0.0),
+            )
         ]
     elif pipeline == "vtracer":
 
@@ -151,6 +156,10 @@ def run_pipeline(
                     Config().get("drawing.origin_y", 0.0),
                 )
             ),
+            StartAtOrigin(
+                Config().get("drawing.origin_x", 0.0),
+                Config().get("drawing.origin_y", 0.0),
+            )
         ]
     else:
         raise ValueError(f"Invalid pipeline: {pipeline}")
