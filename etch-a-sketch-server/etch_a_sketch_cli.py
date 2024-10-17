@@ -122,8 +122,8 @@ def run_pipeline(
                 )
             ),
             StartAtOrigin(
-                Config().get("drawing.origin_x", 0.0),
-                Config().get("drawing.origin_y", 0.0),
+                (Config().get("drawing.origin_x", 0.0),
+                Config().get("drawing.origin_y", 0.0))
             )
         ]
     elif pipeline == "vtracer":
@@ -157,8 +157,8 @@ def run_pipeline(
                 )
             ),
             StartAtOrigin(
-                Config().get("drawing.origin_x", 0.0),
-                Config().get("drawing.origin_y", 0.0),
+                (Config().get("drawing.origin_x", 0.0),
+                Config().get("drawing.origin_y", 0.0))
             )
         ]
     else:
