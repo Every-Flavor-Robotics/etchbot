@@ -511,7 +511,7 @@ class StartAtOrigin(GCodeFilter):
 
         # Add lines until the first G0 or G1 command
         while len(lines) > 0:
-            command, args = self.decode_line(line)
+            command, args = self.decode_line(lines[0])
             if command in ["G0", "G1"]:
                 # Exit to add the origin
                 break
