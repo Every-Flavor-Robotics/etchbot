@@ -83,6 +83,17 @@ class FFmpegSplitter(VideoSplitters):
         if process.returncode != 0:
             raise ValueError(f"FFmpeg command failed: {stderr.decode('utf-8')}")
 
+        # Check if the last frame is empty
+        # Count the number of frames
+        num_frames = len(list(output_dir.glob("*.png")))
+        if num_frames == 0:
+            raise ValueError("No frames were generated.")
+        # Check if the last frame is empty
+        last_frame = output_dir / f"frame_{num_frames:04d}.png"
+        if not Image.open(last_frame).getbbox():
+            last_frame.unlink()
+            secho(f"Deleted empty frame {last_frame}", fg="yellow")
+
         return output_dir
 
     def _process(self, input_path: Path, output_path: Path) -> Path:
