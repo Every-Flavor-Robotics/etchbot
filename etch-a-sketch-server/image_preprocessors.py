@@ -402,7 +402,17 @@ class DeNoisePreprocessor(ImagePreprocessor):
 class BlackAndWhitePreprocessor(ImagePreprocessor):
     """Black and White Preprocessor converts the input image to black and white."""
 
-    PARALLELIZABLE = False
+    PARALLELIZABLE = True
+
+    def __init__(self, monotonize: bool = False):
+        """Initialize the Black and White Preprocessor with the monotonize flag.
+
+        Args:
+            monotonize (bool): Whether to monotonize the image, i.e., split the image into black and white regions only
+        """
+        super().__init__()
+
+        self.monotonize = monotonize
 
     def _process(self, input_path: Path, output_path: Path) -> Path:
         """Process the input image and return the output image.
@@ -426,6 +436,10 @@ class BlackAndWhitePreprocessor(ImagePreprocessor):
         # Convert the image to black and white
         image = image.convert("L")
 
+        if self.monotonize:
+            # Monotonize the image
+            image = self.monotonize_image(image)
+
         while True:
             try:
                 with FileLock(output_path.with_suffix(".lock"), timeout=1):
@@ -443,6 +457,21 @@ class BlackAndWhitePreprocessor(ImagePreprocessor):
             )
 
         return output_path
+
+    def monotonize_image(self, img: Image.Image) -> Image.Image:
+        """Monotonize the image, i.e., split the image into black and white regions only."""
+        # Convert PIL image to numpy array
+        img_array = np.array(img)
+
+        # Apply Otsu's thresholding algorithm
+        _, monotonized_img_array = cv2.threshold(
+            img_array, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        )
+
+        # Convert numpy array back to PIL image
+        monotonized_img = Image.fromarray(monotonized_img_array)
+
+        return monotonized_img
 
 
 class RemBGPreprocessor(ImagePreprocessor):
