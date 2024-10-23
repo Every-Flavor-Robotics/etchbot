@@ -20,7 +20,7 @@ void loop_foc(void* pvParameters);
 const char* ssid = WIFI_SSID;
 const char* password = WIFI_PASSWORD;
 
-#define FLIPPING_VELOCITY_RAD_PER_SEC 2.0
+#define FLIPPING_VELOCITY_RAD_PER_SEC 1.2
 
 MotorGo::MotorGoMini motorgo_mini;
 MotorGo::MotorChannel& tilt_motor = motorgo_mini.ch0;
@@ -42,7 +42,7 @@ ESPWifiConfig::Configurable<bool> enable_motors(motors_enabled, "/enable",
                                                 "Enable motors");
 
 unsigned long last_time = micros();
-unsigned long hold_time = 2.5 * 1e6;
+unsigned long hold_time = 4 * 1e6;
 
 std::atomic<float> target_pos{0.0};
 std::atomic<float> erase_begin{false};
@@ -50,14 +50,14 @@ std::atomic<float> disable_flag{false};
 std::atomic<float> enable_flag{false};
 
 int cur_cycle_count = 0;
-int erase_cycles = 5;
+int erase_cycles = 3;
 
 bool current_pos = true;
 int erase_motor_pwm = 0.0;
 
 bool zeroing = false;
 unsigned long zero_start_time = 0;
-unsigned long zero_hold_time = 8 * 1e6;
+unsigned long zero_hold_time = 4 * 1e6;
 
 float error_tolerance = 0.1;
 
@@ -127,9 +127,11 @@ float get_target(float cur_angle, float target_angle, int direction)
   return target_angle;
 }
 
-float zero_position = get_angle_absolute(PI / 2.0 + 0.14);
-float erase_position_1 = get_angle_absolute(11 * PI / 12.0 + zero_position);
-float erase_position_2 = get_angle_absolute(PI / 12.0 + zero_position);
+float zero_position = get_angle_absolute(PI / 2.0 + PI / 6.0 + 0.2);
+// float erase_position_1 = get_angle_absolute(11 * PI / 12.0 + zero_position);
+// float erase_position_2 = get_angle_absolute(PI / 12.0 + zero_position);
+float erase_position_1 = get_angle_absolute(11.0 * PI / 12.0 + zero_position);
+float erase_position_2 = get_angle_absolute(4.0 * PI / 12.0 + zero_position);
 
 // blue -> 41
 // yellow -> 42
@@ -377,7 +379,7 @@ void loop()
 
   if (erase_begin)
   {
-    erase_motor_pwm = 255 * (1.5 / tilt_motor_config.power_supply_voltage);
+    erase_motor_pwm = 255 * (1.8 / tilt_motor_config.power_supply_voltage);
 
     digitalWrite(CH1_UH, HIGH);
     ledcWrite(7, erase_motor_pwm);
