@@ -14,12 +14,13 @@ drawing:
     frame_rate: 8
   # Options are "potrace" or "vtracer"
   pipeline: "vtracer"
-  width: 130
-  height: 89.375
-  feed_rate: 12500
+  width: 125
+  height: 85.9375
+  feed_rate: 14000
+  acceleration: 13000
   # Zero position in mm
-  origin_x: 4.5
-  origin_y: 4.0
+  origin_x: 2.5
+  origin_y: 1.3
 
 robot:
   # 18:81
