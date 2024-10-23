@@ -28,7 +28,7 @@ robot:
   # 0.1858 mm per rad
   mm_to_knob_rad: 0.1858
   left_right_backlash_mm: 1.45
-  up_down_backlash_mm: 1.87
+  up_down_backlash_mm: 1.84
   backlash_compensation_radpersec: 130.0
   backlash_acceleration: 9000
   max_acceleration: 25000
