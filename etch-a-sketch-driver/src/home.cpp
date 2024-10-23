@@ -64,7 +64,7 @@ void home()
   }
 
   // How far from the corner to inset the zero
-  float inset = 6;
+  float inset = 8;
 
   left_right.enable();
   // Move into the edge of the etch a sketch to zero
@@ -86,38 +86,17 @@ void home()
   left_right.zero_position();
   left_right.loop();
 
-  // Move past the zero point by 1.5 mm
-  target = RAD_PER_MM * (inset + LEFT_RIGHT_BACKLASH_MM + 1.);
+  // Move past the zero point by 2 mm
+  target = RAD_PER_MM * (inset + LEFT_RIGHT_BACKLASH_MM + 2.);
   // Move right
-  left_right.set_target_velocity(1.5 * homing_speed);
+  left_right.set_target_velocity(5.0 * homing_speed);
   while (left_right.get_position() < target)
   {
     left_right.loop();
   }
   left_right.set_target_velocity(0.0);
-  left_right.loop();
-
-  // Move left quickly towards the home
-  target = RAD_PER_MM * inset + 0.5;
-  left_right.set_target_velocity(-homing_speed);
-  while (left_right.get_position() > target)
-  {
-    left_right.loop();
-  }
-  left_right.set_target_velocity(0.0);
-  left_right.loop();
-
-  // Slow down for high precision for final homing
-  target = RAD_PER_MM * inset;
-  left_right.set_target_velocity(-precision_speed);
-  while (left_right.get_position() > target)
-  {
-    left_right.loop();
-  }
   left_right.disable();
   left_right.loop();
-
-  //   Up down homing
 
   up_down.enable();
   //   Move into the edge of the etch a sketch to zero
@@ -142,17 +121,40 @@ void home()
   // Move past the zero point by 1.5 mm
   target = RAD_PER_MM * (inset + UP_DOWN_BACKLASH_MM + 1.);
   // Move up
-  up_down.set_target_velocity(1.5 * homing_speed);
+  up_down.set_target_velocity(5.0 * homing_speed);
   while (up_down.get_position() < target)
   {
     up_down.loop();
   }
   up_down.set_target_velocity(0.0);
+  up_down.disable();
   up_down.loop();
+
+  // Move left quickly towards the home
+  target = RAD_PER_MM * inset + 0.5;
+  left_right.enable();
+  left_right.set_target_velocity(-1.5 * homing_speed);
+  while (left_right.get_position() > target)
+  {
+    left_right.loop();
+  }
+  left_right.set_target_velocity(0.0);
+  left_right.loop();
+
+  // Slow down for high precision for final homing
+  target = RAD_PER_MM * inset;
+  left_right.set_target_velocity(-precision_speed);
+  while (left_right.get_position() > target)
+  {
+    left_right.loop();
+  }
+  left_right.disable();
+  left_right.loop();
 
   // Move down quickly towards the home
   target = RAD_PER_MM * inset + 0.5;
-  up_down.set_target_velocity(-homing_speed);
+  up_down.enable();
+  up_down.set_target_velocity(-1.5 * homing_speed);
   while (up_down.get_position() > target)
   {
     up_down.loop();
