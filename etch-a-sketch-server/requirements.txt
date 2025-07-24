@@ -1,4 +1,4 @@
-backgroundremover==0.2.8
+backgroundremover==0.3.4
 click==8.1.7
 ffmpeg-python==0.2.0
 filelock==3.15.4
