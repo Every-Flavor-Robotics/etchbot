@@ -1,133 +1,133 @@
 import React, { useState, useEffect } from "react";
-import { ChakraProvider, Box, Heading, Flex, Text, Spinner, HStack, Circle } from "@chakra-ui/react";
+import { ChakraProvider, Box, Flex, Text, Spinner } from "@chakra-ui/react";
 import axios from "axios";
-import RobotPanel from "./components/RobotPanel"; // Import the new RobotPanel component
+import RobotPanel from "./components/RobotPanel";
+import { colors, stateColors } from "./theme";
 
-interface Etchbot {
-    name: string;
-    state?: string;
-}
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5010";
 
-interface EtchbotsResponse {
-    etchbots: string[];
-}
-
-interface EtchbotStateResponse {
-    state: string;
-}
-
-const stateColors: { [key: string]: string } = {
-    DISCONNECTED: "gray",
-    READY: "green",
-    DRAWING: "yellow",
-    DRAWING_COMPLETE: "green",
-    ERASING: "yellow",
-    ERASING_COMPLETE: "green",
-    ERROR: "red",
-};
+interface Etchbot { name: string; state?: string; }
+interface EtchbotsResponse { etchbots: string[]; }
+interface EtchbotStateResponse { state: string; }
 
 const App: React.FC = () => {
-    const [etchbots, setEtchbots] = useState<Etchbot[]>([]);
-    const [selectedEtchbot, setSelectedEtchbot] = useState<Etchbot | null>(null);
-    const [loading, setLoading] = useState(true);
+  const [etchbots, setEtchbots] = useState<Etchbot[]>([]);
+  const [selected, setSelected] = useState<Etchbot | null>(null);
+  const [loading, setLoading] = useState(true);
 
-    // Fetch etchbots and their states
-    useEffect(() => {
-        const fetchEtchbotsAndStates = async () => {
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5010'; // Use the environment variable or fallback to localhost
-
-            try {
-                const response = await axios.get(`${apiUrl}/etchbots`);
-                const etchbotsData = response.data as EtchbotsResponse; // Cast response data to EtchbotsResponse
-
-                if (Array.isArray(etchbotsData.etchbots)) {
-                    const etchbotsWithState = await Promise.all(
-                        etchbotsData.etchbots.map(async (name) => {
-                            const stateResponse = await axios.get(`${apiUrl}/etchbot/state`, {
-                                params: { name }, // Pass the name as a query parameter
-                            });
-                            const stateData = stateResponse.data as EtchbotStateResponse; // Cast stateResponse data to EtchbotStateResponse
-
-                            return {
-                                name,
-                                state: stateData.state,
-                            };
-                        })
-                    );
-                    setEtchbots(etchbotsWithState);
-                    setSelectedEtchbot((prevSelected) =>
-                        etchbotsWithState.find((bot) => bot.name === prevSelected?.name) || etchbotsWithState[0] || null
-                    );
-                } else {
-                    console.error("Unexpected response format:", response.data);
-                }
-            } catch (err) {
-                console.error("Failed to fetch etchbots and their states", err);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchEtchbotsAndStates(); // Initial fetch
-
-        const etchbotsInterval = setInterval(fetchEtchbotsAndStates, 5000); // Poll every 5 seconds
-
-        return () => clearInterval(etchbotsInterval); // Cleanup interval on component unmount
-    }, []);
-
-    const handleEtchbotSelect = (etchbot: Etchbot) => {
-        setSelectedEtchbot(etchbot);
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const res = await axios.get<EtchbotsResponse>(`${API_URL}/etchbots`);
+        if (!Array.isArray(res.data.etchbots)) return;
+        const bots = await Promise.all(
+          res.data.etchbots.map(async (name) => {
+            const s = await axios.get<EtchbotStateResponse>(`${API_URL}/etchbot/state`, { params: { name } });
+            return { name, state: s.data.state };
+          })
+        );
+        setEtchbots(bots);
+        setSelected(prev => bots.find(b => b.name === prev?.name) || bots[0] || null);
+      } catch (e) {
+        console.error("Failed to fetch etchbots", e);
+      } finally {
+        setLoading(false);
+      }
     };
+    fetchAll();
+    const id = setInterval(fetchAll, 5000);
+    return () => clearInterval(id);
+  }, []);
 
-    return (
-        <ChakraProvider>
-            <Flex>
-                {/* Sidebar */}
+  return (
+    <ChakraProvider>
+      <Box minH="100vh" bg={colors.surface} display="flex" flexDirection="column">
+        {/* Top bar */}
+        <Flex
+          align="center"
+          gap="10px"
+          px="20px"
+          py="12px"
+          bg={colors.white}
+          borderBottom="3px solid #f0f0f0"
+          flexShrink={0}
+        >
+          {/* Logo */}
+          <Flex gap="4px" align="center">
+            <Box w="26px" h="26px" bg={colors.blue} borderRadius="8px" display="flex" alignItems="center" justifyContent="center">
+              <Text color="white" fontSize="13px" fontWeight="900">E</Text>
+            </Box>
+            <Box w="8px" h="26px" bg={colors.amber} borderRadius="4px" />
+            <Box w="8px" h="26px" bg={colors.coral} borderRadius="4px" />
+          </Flex>
+          <Text fontWeight="800" fontSize="15px" color={colors.ink} letterSpacing="-0.3px">etchbot</Text>
+
+          {/* Robot tabs */}
+          <Flex ml="16px" gap="6px">
+            {loading ? (
+              <Spinner size="sm" />
+            ) : etchbots.map(bot => (
+              <Box
+                key={bot.name}
+                bg={selected?.name === bot.name ? colors.blue : "#f0f0f5"}
+                color={selected?.name === bot.name ? "white" : "#888"}
+                fontSize="10px"
+                fontWeight="700"
+                px="12px"
+                py="4px"
+                borderRadius="20px"
+                cursor="pointer"
+                onClick={() => setSelected(bot)}
+                display="flex"
+                alignItems="center"
+                gap="5px"
+              >
                 <Box
-                    w="250px"
-                    p={5}
-                    bg="gray.100"
-                    height="100vh"  // Extend the sidebar to the full viewport height
-                    display="flex"
-                    flexDirection="column"
-                >
-                    <Heading as="h2" size="md" mb={4}>
-                        Etchbots
-                    </Heading>
-                    {loading ? (
-                        <Spinner />
-                    ) : (
-                        etchbots.length > 0 ? (
-                            etchbots.map((etchbot) => (
-                                <HStack
-                                    key={etchbot.name}
-                                    p={2}
-                                    mb={2}
-                                    cursor="pointer"
-                                    bg={selectedEtchbot?.name === etchbot.name ? "teal.100" : "white"}
-                                    onClick={() => handleEtchbotSelect(etchbot)}
-                                >
-                                    <Circle size="10px" bg={stateColors[etchbot.state || "DISCONNECTED"]} />
-                                    <Text>{etchbot.name}</Text>
-                                </HStack>
-                            ))
-                        ) : (
-                            <Text>No etchbots found.</Text>
-                        )
-                    )}
-                </Box>
+                  w="7px"
+                  h="7px"
+                  borderRadius="50%"
+                  bg={stateColors[bot.state || "DISCONNECTED"]}
+                  flexShrink={0}
+                />
+                {bot.name}
+              </Box>
+            ))}
+          </Flex>
 
-                {/* Main Content */}
-                <Box flex="1" p={5}>
-                    {selectedEtchbot ? (
-                        <RobotPanel etchbotName={selectedEtchbot.name} />
-                    ) : (
-                        <Text>Select an etchbot to view the panel.</Text>
-                    )}
-                </Box>
+          {/* Status badge */}
+          {selected && (
+            <Box
+              ml="auto"
+              display="flex"
+              alignItems="center"
+              gap="6px"
+              bg="#e8f9f0"
+              borderRadius="20px"
+              px="12px"
+              py="4px"
+              border="1.5px solid #b6ebd0"
+            >
+              <Box w="8px" h="8px" borderRadius="50%" bg={stateColors[selected.state || "DISCONNECTED"]} />
+              <Text color="#16a34a" fontSize="10px" fontWeight="700">
+                {selected.state || "Disconnected"}
+              </Text>
+            </Box>
+          )}
+        </Flex>
+
+        {/* Main content */}
+        <Box flex={1} overflow="auto">
+          {selected ? (
+            <RobotPanel etchbotName={selected.name} />
+          ) : (
+            <Flex h="100%" align="center" justify="center">
+              <Text color="#888">No robots found.</Text>
             </Flex>
-        </ChakraProvider>
-    );
+          )}
+        </Box>
+      </Box>
+    </ChakraProvider>
+  );
 };
 
 export default App;

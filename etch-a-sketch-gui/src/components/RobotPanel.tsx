@@ -1,46 +1,31 @@
 import React from "react";
-import { Box, Heading, Grid, GridItem, Divider } from "@chakra-ui/react";
-import UploadForm from "./UploadForm";
-import QueueStatus from "./QueueStatus";
-import CompletedStatus from "./CompletedStatus";
-import CameraManager from "./CameraManager";
-import RobotStatus from "./RobotStatus"; // Import the RobotStatus component
+import { Grid, GridItem } from "@chakra-ui/react";
+import NewDrawingCard from "./NewDrawingCard";
+import RobotCard from "./RobotCard";
+import QueueCard from "./QueueCard";
+import CompletedCard from "./CompletedCard";
 
-interface RobotPanelProps {
-    etchbotName: string;
-}
+interface RobotPanelProps { etchbotName: string; }
 
-const RobotPanel: React.FC<RobotPanelProps> = ({etchbotName }) => {
-    return (
-        <Box p={5}>
-            <Heading as="h1" mb={5} textAlign="center">
-                {etchbotName} Panel
-            </Heading>
-            <Grid templateColumns="repeat(2, 1fr)" gap={6}>
-                <GridItem colSpan={2}>
-                    <RobotStatus etchbotName={etchbotName} />
-                </GridItem>
-                <GridItem colSpan={2}>
-                    <Divider />
-                </GridItem>
-                <GridItem colSpan={[2, 1]}>
-                    <UploadForm etchbotName={etchbotName} />
-                </GridItem>
-                <GridItem colSpan={[2, 1]}>
-                    <CameraManager etchbotName={etchbotName} />
-                </GridItem>
-                <GridItem colSpan={2}>
-                    <Divider />
-                </GridItem>
-                <GridItem colSpan={[2, 1]}>
-                    <QueueStatus etchbotName={etchbotName} />
-                </GridItem>
-                <GridItem colSpan={[2, 1]}>
-                    <CompletedStatus etchbotName={etchbotName} />
-                </GridItem>
-            </Grid>
-        </Box>
-    );
-};
+const RobotPanel: React.FC<RobotPanelProps> = ({ etchbotName }) => (
+  <Grid
+    templateColumns={{ base: "1fr", md: "1fr 1fr" }}
+    gap="14px"
+    p="16px"
+    alignItems="start"
+  >
+    {/* Left: submit input */}
+    <GridItem display="flex" flexDirection="column">
+      <NewDrawingCard etchbotName={etchbotName} />
+    </GridItem>
+
+    {/* Right: status → queue → completed */}
+    <GridItem display="flex" flexDirection="column" gap="12px">
+      <RobotCard etchbotName={etchbotName} />
+      <QueueCard etchbotName={etchbotName} />
+      <CompletedCard etchbotName={etchbotName} />
+    </GridItem>
+  </Grid>
+);
 
 export default RobotPanel;

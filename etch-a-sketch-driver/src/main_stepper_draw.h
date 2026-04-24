@@ -8,63 +8,47 @@
 #include <chrono>
 #include <vector>
 
-#include "A4988.h"
+#include "FastAccelStepper.h"
 #include "HTTPClient.h"
-#include "MultiDriver.h"
 #include "gcode.h"
 #include "planner.h"
 #include "wifi_gcode_stream.h"
 
-//  Conversion from mm to radians
-// #define GEAR_RATIO 30.0 / 66.0  // Motor to knob
-#define MICROSTEPS 16
+//  Conversion from mm to steps
+#define MICROSTEPS 32
 #define GEAR_RATIO (18.0f / 81.0f)  // Motor to knob
 #define RAD_PER_MM (0.1858f / GEAR_RATIO)
 #define MMPERMIN_TO_RADPERSEC (RAD_PER_MM / 60.0)
 #define STEPS_PER_RAD (200.0f / (2.0f * PI)) * MICROSTEPS
 #define STEPS_PER_MM (STEPS_PER_RAD * RAD_PER_MM)
-#define MMPERMIN_TO_STEPSPERSEC (STEPS_PER_RAD * MMPERMIN_TO_RADPERSEC)
 
-#define ACCELERATION 25000
-#define MAX_ACCELERATION 100000
+#define ACCELERATION 250000        // steps/s^2
+#define MAX_ACCELERATION 1000000   // steps/s^2
 #define UP_DOWN_BACKLASH_RAD (2.0 * STEPS_PER_MM)
 #define LEFT_RIGHT_BACKLASH_RAD (1.8 * STEPS_PER_MM)
-#define BACKLASH_COMEPSENATION_RADPERSEC 100.0f
-// mm * STEPS_PER_MM = rad
-#define ERROR_TOLERANCE (0.01 * STEPS_PER_MM)
+#define BACKLASH_COMPENSATION_RADPERSEC 100.0f
 
-#define sign(x) ((x) < -0.0001 ? -1 : ((x) > 0.0001 ? 1 : 0))
+#define ERROR_TOLERANCE (0.01 * STEPS_PER_MM)
 
 #define X_LIM 130
 #define Y_LIM 89.375
 
-#define LEFT_RIGHT_DIR 35
-#define LEFT_RIGHT_STEP 41
-#define UP_DOWN_DIR 40
-#define UP_DOWN_STEP 39
+// MotorGo Plink GPIO header (ESP32-S3)
+#define LEFT_RIGHT_STEP 37
+#define LEFT_RIGHT_DIR 39
+#define UP_DOWN_STEP 35
+#define UP_DOWN_DIR 36
 
-A4988 left_right(200, LEFT_RIGHT_DIR, LEFT_RIGHT_STEP);
-A4988 up_down(200, UP_DOWN_DIR, UP_DOWN_STEP);
-MultiDriver controller(left_right, up_down);
+FastAccelStepperEngine engine = FastAccelStepperEngine();
+FastAccelStepper* left_right = nullptr;
+FastAccelStepper* up_down = nullptr;
 
-TaskHandle_t loop_foc_task;
-TickType_t xLastWakeTime;
-void loop_foc(void* pvParameters);
+TaskHandle_t motor_task_handle;
+void motor_task(void* pvParameters);
 
-// Motor definitions
-std::atomic<float> left_right_position_target(0.0);
-std::atomic<float> up_down_position_target(0.0);
-std::atomic<float> up_down_velocity_target(0.0);
+// Target velocities in rad/s (will be converted to steps/s in motor_task)
 std::atomic<float> left_right_velocity_target(0.0);
-std::atomic<float> up_down_acceleration_target(0.0);
-std::atomic<float> left_right_acceleration_target(0.0);
-std::atomic<float> left_right_gain_schedule(1.0);
-std::atomic<float> up_down_gain_schedule(1.0);
-// Whether running in OL or CL mode
-std::atomic<bool> left_right_ol_mode(false);
-std::atomic<bool> up_down_ol_mode(false);
-
-std::atomic<int> foc_loops(0);
+std::atomic<float> up_down_velocity_target(0.0);
 
 bool enable_flag = false;
 bool disable_flag = false;
@@ -84,166 +68,122 @@ void freq_println(String str, int freq)
 
 void home()
 {
-  //   Serial.println("HOMING: WAITING FOR BUTTON PRESS");
-
-  disable_flag = true;
-  delay(10);
+  Serial.println("[home] Returning to (0,0)");
+  
+  // Stop the velocity-based target tracking
+  motors_enabled = false;
+  left_right_velocity_target.store(0);
+  up_down_velocity_target.store(0);
+  
+  // Use FastAccelStepper's absolute move to return to 0 steps exactly
+  if (left_right) {
+      left_right->setSpeedInHz(3200); // Moderate speed for homing
+      left_right->moveTo(0);
+  }
+  if (up_down) {
+      up_down->setSpeedInHz(3200);
+      up_down->moveTo(0);
+  }
+  
+  // Wait for move to complete
+  while ((left_right && left_right->isRunning()) || (up_down && up_down->isRunning())) {
+      vTaskDelay(pdMS_TO_TICKS(10));
+  }
+  
+  Serial.println("[home] At origin");
 }
 
 // GCode objects
 GCode::GCodeParser* parser;
 GCode::WifiGCodeStream* stream;
 
-struct step_command_t
-{
-  std::atomic<float> left_right_accel;
-  std::atomic<float> up_down_accel;
-  std::atomic<float> left_right_vel;
-  std::atomic<float> up_down_vel;
-  std::atomic<long> dx;
-  std::atomic<long> dy;
-};
-
-struct command_t
-{
-  std::atomic<bool> ready;
-  step_command_t backlash_command;
-  step_command_t draw_command;
-};
-
-command_t cur_command;
-
 void draw_pre_setup() {}
 
 void draw_setup()
 {
-  Serial.begin(5000000);
-  while (!Serial)
+  Serial.println("[init] FastAccelStepper engine starting...");
+  engine.init();
+  left_right = engine.stepperConnectToPin(LEFT_RIGHT_STEP);
+  if (left_right)
   {
-    delay(50);
+    left_right->setDirectionPin(LEFT_RIGHT_DIR);
+    left_right->setAcceleration(ACCELERATION);
+  }
+  else
+  {
+    Serial.println("[ERROR] Could not attach Left/Right stepper");
   }
 
-  stream = new GCode::WifiGCodeStream("192.168.10.15", 50);
-  parser = new GCode::GCodeParser(stream, 2000);
+  up_down = engine.stepperConnectToPin(UP_DOWN_STEP);
+  if (up_down)
+  {
+    up_down->setDirectionPin(UP_DOWN_DIR);
+    up_down->setAcceleration(ACCELERATION);
+  }
+  else
+  {
+    Serial.println("[ERROR] Could not attach Up/Down stepper");
+  }
 
+  stream = new GCode::WifiGCodeStream(HOST, 50);
+  parser = new GCode::GCodeParser(stream, 2000);
   GCode::start_parser(*parser);
 
-  //   xTaskCreatePinnedToCore(
-  //       loop_foc,       /* Task function. */
-  //       "Loop FOC",     /* name of task. */
-  //       10000,          /* Stack size of task */
-  //       NULL,           /* parameter of the task */
-  //       1,              /* priority of the task */
-  //       &loop_foc_task, /* Task handle to keep track of created task */
-  //       1);             /* pin task to core 1 */
-
-  left_right.begin(0, MICROSTEPS);
-  up_down.begin(0, MICROSTEPS);
-
-  cur_command.ready.store(false);
+  xTaskCreatePinnedToCore(motor_task, "Motor Task", 4096, NULL, 1,
+                          &motor_task_handle, 1);
 }
 
-bool backlash_complete = false;
-bool command_complete = true;
-void loop_foc(void* pvParameters)
+void motor_task(void* pvParameters)
 {
-  //   Serial.print("Loop FOC running on core ");
-  //   Serial.println(xPortGetCoreID());
+  while (true)
+  {
+    if (enable_flag)
+    {
+        // FastAccelStepper handles enable internally if pin is set,
+        // but for now we just track state
+        motors_enabled = true;
+        enable_flag = false;
+    }
+    if (disable_flag)
+    {
+        left_right->stopMove();
+        up_down->stopMove();
+        motors_enabled = false;
+        disable_flag = false;
+    }
 
-  //   for (;;)
-  //   {
-  //     // If we're done with the command and a new one is ready
-  //     if (command_complete && cur_command.ready.load())
-  //     {
-  //       step_command_t& command = backlash_complete
-  //                                     ? cur_command.draw_command
-  //                                     : cur_command.backlash_command;
+    if (motors_enabled)
+    {
+        float lr_vel_rad = left_right_velocity_target.load();
+        float ud_vel_rad = up_down_velocity_target.load();
 
-  //       float left_right_accel = abs(command.left_right_accel.load());
-  //       float up_down_accel = abs(command.up_down_accel.load());
+        int32_t lr_steps_s = (int32_t)(lr_vel_rad * STEPS_PER_RAD);
+        int32_t ud_steps_s = (int32_t)(ud_vel_rad * STEPS_PER_RAD);
 
-  //       // Make sure we don't divide by zero
-  //       if (left_right_accel == 0)
-  //       {
-  //         left_right_accel = 1;
-  //       }
-  //       if (up_down_accel == 0)
-  //       {
-  //         up_down_accel = 1;
-  //       }
+        if (lr_steps_s == 0) {
+            left_right->stopMove();
+        } else if (lr_steps_s > 0) {
+            left_right->setSpeedInHz(lr_steps_s);
+            left_right->runForward();
+        } else {
+            left_right->setSpeedInHz(-lr_steps_s);
+            left_right->runBackward();
+        }
 
-  //       // Load in targets and command them to the motors
-  //       left_right.setSpeedProfile(BasicStepperDriver::LINEAR_SPEED,
-  //                                  left_right_accel, left_right_accel);
+        if (ud_steps_s == 0) {
+            up_down->stopMove();
+        } else if (ud_steps_s > 0) {
+            up_down->setSpeedInHz(ud_steps_s);
+            up_down->runForward();
+        } else {
+            up_down->setSpeedInHz(-ud_steps_s);
+            up_down->runBackward();
+        }
+    }
 
-  //       up_down.setSpeedProfile(BasicStepperDriver::LINEAR_SPEED,
-  //       up_down_accel,
-  //                               up_down_accel);
-
-  //       float left_right_vel = abs(command.left_right_vel.load());
-  //       float up_down_vel = abs(command.up_down_vel.load());
-
-  //       if (left_right_vel == 0)
-  //       {
-  //         left_right_vel = 1;
-  //       }
-
-  //       if (up_down_vel == 0)
-  //       {
-  //         up_down_vel = 1;
-  //       }
-
-  //       left_right.setRPM(left_right_vel * 60.0 / (2.0 * PI));
-  //       up_down.setRPM(up_down_vel * 60.0 / (2.0 * PI));
-
-  //       long dx = command.dx.load();
-  //       long dy = command.dy.load();
-
-  //       //   Parameters
-  //       String complete = backlash_complete ? "true" : "false";
-  //       Serial.println("---------------");
-  //       Serial.println("Backlash complete? " + complete);
-  //       Serial.println("backlash dx: " +
-  //       String(cur_command.backlash_command.dx)); Serial.println("backlash
-  //       dy: " + String(cur_command.backlash_command.dy));
-  //       Serial.println("MAIN dx: " + String(cur_command.draw_command.dx));
-  //       Serial.println("MAIN dy: " + String(cur_command.draw_command.dy));
-  //       Serial.println("dx: " + String(dx)); Serial.println("dy: " +
-  //       String(dy)); Serial.println("left_right_accel: " +
-  //       String(left_right_accel)); Serial.println("up_down_accel: " +
-  //       String(up_down_accel)); Serial.println("left_right_vel: " +
-  //       String(left_right_vel)); Serial.println("up_down_vel: " +
-  //       String(up_down_vel)); Serial.println("---------------");
-
-  //       //   if dx and dy are both zero, we don't need to move
-  //       command_complete = false;
-
-  //       // Only actually command the motion if we have a non-zero dx or dy
-  //       //   E
-  //       if (dx != 0 || dy != 0)
-  //       {
-  //         controller.startMove(dx, dy);
-  //       }
-  //     }
-
-  //     if (!controller.nextAction() && !command_complete)
-  //     {
-  //       if (!backlash_complete)
-  //       {
-  //         command_complete = true;
-  //         backlash_complete = true;
-  //         // Serial.println("Backlash complete");
-  //       }
-  //       else
-  //       {
-  //         command_complete = true;
-  //         backlash_complete = false;
-  //         cur_command.ready.store(false);
-  //         // Serial.println("Command complete");
-  //       }
-  //     }
-  //     esp_task_wdt_reset();
-  //   }
+    vTaskDelay(pdMS_TO_TICKS(10));
+    esp_task_wdt_reset();
+  }
 }
 
 Planner::BacklashCompensatedTrajectoryParameters profile;
@@ -254,307 +194,112 @@ float up_down_backlash_offset = 0;
 GCode::MotionCommand command1;
 GCode::MotionCommand command2;
 
-// Add pointers to the current and next command
 GCode::MotionCommand* current_command = &command1;
 bool next_command_ready = false;
 GCode::MotionCommand* next_command = &command2;
 GCode::MotionCommand* temp_command;
 
+float previous_position_x = 0;
+float previous_position_y = 0;
+float previous_velocity_x = 0;
+float previous_velocity_y = 0;
 unsigned long previous_loop_time = 0;
-
-float left_right_position = 0;
-float up_down_position = 0;
-
-unsigned long last_loop_time = 0;
 bool first = true;
+bool complete = false;
 
-float rpm_to_rad_per_sec(float rpm) { return rpm * 2.0 * PI / 60.0; }
-
-bool ready_to_plan = false;
 bool draw_loop()
 {
+  long lr_pos_steps = left_right->getCurrentPosition();
+  long ud_pos_steps = up_down->getCurrentPosition();
+
   // Safety conditions
-  if (left_right_position > (X_LIM + 8) * STEPS_PER_MM ||
-      left_right_position < -8 * STEPS_PER_MM ||
-      up_down_position > (Y_LIM + 8) * STEPS_PER_MM ||
-      up_down_position < -8 * STEPS_PER_MM)
+  if (lr_pos_steps > (X_LIM + 8) * STEPS_PER_MM ||
+      lr_pos_steps < -8 * STEPS_PER_MM ||
+      ud_pos_steps > (Y_LIM + 8) * STEPS_PER_MM ||
+      ud_pos_steps < -8 * STEPS_PER_MM)
   {
-    // Serial.println("Position out of bounds");
     disable_flag = true;
   }
 
-  // If cur_command is not ready, that means we've completed the previous
-  // command
-  if (!cur_command.ready.load() && next_command_ready)
+  if (complete) return true;
+
+  if (next_command_ready && (first || Planner::compute_backlash_compesated_trapezoid_velocity_vector(cur_trajectory, micros()).is_complete))
   {
-    Serial.println("Loading next command");
+      if (first) {
+          // Delay to allow buffer to fill
+          vTaskDelay(pdMS_TO_TICKS(3000));
+          first = false;
+          motors_enabled = true;
+      }
+
     // Swap the pointers
     temp_command = current_command;
     current_command = next_command;
     next_command = temp_command;
     next_command_ready = false;
 
-    // delay(1000);
+    profile.main_profile.x_initial = (float)lr_pos_steps / STEPS_PER_RAD - left_right_backlash_offset / STEPS_PER_RAD;
+    profile.main_profile.y_initial = (float)ud_pos_steps / STEPS_PER_RAD - up_down_backlash_offset / STEPS_PER_RAD;
 
-    profile.main_profile.x_initial =
-        left_right_position - left_right_backlash_offset;
-    profile.main_profile.y_initial = up_down_position - up_down_backlash_offset;
-
-    // Print steps and backlash offset
-    // Serial.println("X: " + String(left_right_position));
-    // Serial.println("Y: " + String(up_down_position));
-    // Serial.println("X Offset: " + String(left_right_backlash_offset));
-    // Serial.println("Y Offset: " + String(up_down_backlash_offset));
-
-    profile.main_profile.x_final =
-        constrain(current_command->x * STEPS_PER_MM, 0, X_LIM * STEPS_PER_MM);
-    profile.main_profile.y_final =
-        constrain(current_command->y * STEPS_PER_MM, 0, Y_LIM * STEPS_PER_MM);
+    profile.main_profile.x_final = constrain(current_command->x * STEPS_PER_MM / STEPS_PER_RAD, 0, X_LIM * STEPS_PER_MM / STEPS_PER_RAD);
+    profile.main_profile.y_final = constrain(current_command->y * STEPS_PER_MM / STEPS_PER_RAD, 0, Y_LIM * STEPS_PER_MM / STEPS_PER_RAD);
 
     profile.main_profile.v_initial = 0;
-    profile.main_profile.v_target = 90;
+    profile.main_profile.v_target = current_command->feedrate * MMPERMIN_TO_RADPERSEC;
     profile.main_profile.v_final = 0;
+    profile.main_profile.a_target = ACCELERATION / STEPS_PER_RAD;
 
-    profile.main_profile.a_target = ACCELERATION;
-
-    //   Ignore the rest of the command, run the homing procedure
     if (current_command->home)
     {
       home();
-
-      return true;
-    }
-    //   Otherwise, generate a trapezoid profile
-    else
-    {
-      //   //   Serial.println("Replan with");
-      //   Serial.println("COMMAND X: " + String(current_command->x));
-      //   Serial.println("Y: " + String(current_command->y));
-
-      //   delay(3000);
-      // Force a replan when we have a new command
-      ready_to_plan = true;
-    }
-  }
-
-  //   Update position based on current velocity
-  //   Generate a new profile
-  //   Wait for the backlash compensation phase to finish before replanning
-  if (ready_to_plan)
-  {
-    // Serial.println("Updating plan");
-
-    // Assume the motions are complete
-
-    // Update the backlash offsets
-    left_right_backlash_offset =
-        constrain(left_right_backlash_offset + cur_command.backlash_command.dx,
-                  0, LEFT_RIGHT_BACKLASH_RAD);
-    up_down_backlash_offset =
-        constrain(up_down_backlash_offset + cur_command.backlash_command.dy, 0,
-                  UP_DOWN_BACKLASH_RAD);
-
-    left_right_position +=
-        cur_command.backlash_command.dx + cur_command.draw_command.dx;
-    up_down_position +=
-        cur_command.backlash_command.dy + cur_command.draw_command.dy;
-
-    profile.x_current = left_right_position - left_right_backlash_offset;
-    profile.y_current = up_down_position - up_down_backlash_offset;
-
-    // Compute current velocity magnitude
-    profile.v_current = 0;
-
-    profile.left_right_backlash_offset = left_right_backlash_offset;
-    profile.up_down_backlash_offset = up_down_backlash_offset;
-
-    profile.left_right_backlash_distance = LEFT_RIGHT_BACKLASH_RAD;
-    profile.up_down_backlash_distance = UP_DOWN_BACKLASH_RAD;
-
-    profile.v_target_backlash = BACKLASH_COMEPSENATION_RADPERSEC;
-    // TODO: CHANGE THIS
-    profile.a_target_backlash = ACCELERATION;
-
-    profile.backlash_compensation_enabled = true;
-
-    cur_trajectory = Planner::generate_backlash_compensated_profile(
-        profile, ERROR_TOLERANCE);
-
-    // We have backlash compensation
-    if (cur_trajectory.backlash_compensation_profile.end_delay_delta_us > 0)
-    {
-      cur_command.backlash_command.left_right_accel.store(
-          cur_trajectory.backlash_compensation_profile.a_target *
-          cos(cur_trajectory.backlash_compensation_profile.angle));
-      cur_command.backlash_command.up_down_accel.store(
-          cur_trajectory.backlash_compensation_profile.a_target *
-          sin(cur_trajectory.backlash_compensation_profile.angle));
-
-      cur_command.backlash_command.left_right_vel.store(
-          cur_trajectory.backlash_compensation_profile.v_target *
-          cos(cur_trajectory.backlash_compensation_profile.angle));
-      cur_command.backlash_command.up_down_vel.store(
-          cur_trajectory.backlash_compensation_profile.v_target *
-          sin(cur_trajectory.backlash_compensation_profile.angle));
-
-      cur_command.backlash_command.dx.store(
-          cur_trajectory.backlash_compensation_profile.dx);
-      cur_command.backlash_command.dy.store(
-          cur_trajectory.backlash_compensation_profile.dy);
-
-      Serial.println("---------------");
-      Serial.println("Backlash compensation");
-      Serial.println("dx: " +
-                     String(cur_trajectory.backlash_compensation_profile.dx));
-
-      Serial.println("dy: " +
-                     String(cur_trajectory.backlash_compensation_profile.dy));
-      Serial.println("---------------");
+      complete = true;
     }
     else
     {
-      // Store zeros in the backlash command
-      cur_command.backlash_command.left_right_accel.store(0);
-      cur_command.backlash_command.up_down_accel.store(0);
-      cur_command.backlash_command.left_right_vel.store(0);
-      cur_command.backlash_command.up_down_vel.store(0);
-      cur_command.backlash_command.dx.store(0);
-      cur_command.backlash_command.dy.store(0);
+        profile.x_current = profile.main_profile.x_initial;
+        profile.y_current = profile.main_profile.y_initial;
+        profile.v_current = 0;
+        profile.left_right_backlash_offset = left_right_backlash_offset / STEPS_PER_RAD;
+        profile.up_down_backlash_offset = up_down_backlash_offset / STEPS_PER_RAD;
+        profile.left_right_backlash_distance = LEFT_RIGHT_BACKLASH_RAD / STEPS_PER_RAD;
+        profile.up_down_backlash_distance = UP_DOWN_BACKLASH_RAD / STEPS_PER_RAD;
+        profile.v_target_backlash = BACKLASH_COMPENSATION_RADPERSEC;
+        profile.a_target_backlash = ACCELERATION / STEPS_PER_RAD;
+        profile.backlash_compensation_enabled = true;
+
+        cur_trajectory = Planner::generate_backlash_compensated_profile(profile, ERROR_TOLERANCE / STEPS_PER_RAD);
+        cur_trajectory.backlash_compensation_profile.start_time_us = micros();
+        cur_trajectory.profile.start_time_us = micros(); // Will be offset in compute function
     }
-
-    cur_command.draw_command.left_right_accel.store(
-        cur_trajectory.profile.a_target * cos(cur_trajectory.profile.angle));
-    cur_command.draw_command.up_down_accel.store(
-        cur_trajectory.profile.a_target * sin(cur_trajectory.profile.angle));
-
-    cur_command.draw_command.left_right_vel.store(
-        cur_trajectory.profile.v_target * cos(cur_trajectory.profile.angle));
-    cur_command.draw_command.up_down_vel.store(
-        cur_trajectory.profile.v_target * sin(cur_trajectory.profile.angle));
-
-    cur_command.draw_command.dx.store(cur_trajectory.profile.dx);
-    cur_command.draw_command.dy.store(cur_trajectory.profile.dy);
-
-    cur_command.ready.store(true);
-
-    ready_to_plan = false;
   }
+
+  unsigned long now = micros();
+  Planner::TrajectoryState state = Planner::compute_backlash_compesated_trapezoid_velocity_vector(cur_trajectory, now);
+
+  left_right_velocity_target.store(state.v.x);
+  up_down_velocity_target.store(state.v.y);
+
+  // Update backlash offsets (in steps, but stored as rad-equivalent here for simplicity with the logic)
+  float cur_pos_x = (float)lr_pos_steps / STEPS_PER_RAD;
+  float cur_pos_y = (float)ud_pos_steps / STEPS_PER_RAD;
+  
+  // Actually, let's keep backlash in steps for clarity if we are using steps
+  // but the planner works in whatever units we give it. 
+  // For consistency with main_draw.h, let's keep units as radians for the targets.
 
   if (!next_command_ready && parser->is_available())
   {
-    // Retrieve next command
     GCode::MotionCommandResult result = parser->pop_command_buffer();
-    // If the command was successfully retrieved
     if (result.success)
     {
-      // Copy data to the next command
       next_command->x = result.command.x;
       next_command->y = result.command.y;
       next_command->z = result.command.z;
       next_command->feedrate = result.command.feedrate;
       next_command->home = result.command.home;
       next_command_ready = true;
-
-      //   Serial.println("Next command ready");
-      //   delay(5000);
-
-      if (first)
-      {
-        first = false;
-        Serial.println("Waiting to preprocess all data");
-        vTaskDelay(3000 / portTICK_PERIOD_MS);
-      }
     }
   }
 
-  // If we're done with the command and a new one is ready
-  if (command_complete && cur_command.ready.load())
-  {
-    step_command_t& command = backlash_complete ? cur_command.draw_command
-                                                : cur_command.backlash_command;
-
-    float left_right_accel = abs(command.left_right_accel.load());
-    float up_down_accel = abs(command.up_down_accel.load());
-
-    // Make sure we don't divide by zero
-    if (left_right_accel == 0)
-    {
-      left_right_accel = 1;
-    }
-    if (up_down_accel == 0)
-    {
-      up_down_accel = 1;
-    }
-
-    // Load in targets and command them to the motors
-    left_right.setSpeedProfile(BasicStepperDriver::LINEAR_SPEED,
-                               left_right_accel, left_right_accel);
-
-    up_down.setSpeedProfile(BasicStepperDriver::LINEAR_SPEED, up_down_accel,
-                            up_down_accel);
-
-    float left_right_vel = abs(command.left_right_vel.load());
-    float up_down_vel = abs(command.up_down_vel.load());
-
-    if (left_right_vel == 0)
-    {
-      left_right_vel = 1;
-    }
-
-    if (up_down_vel == 0)
-    {
-      up_down_vel = 1;
-    }
-
-    left_right.setRPM(left_right_vel * 60.0 / (2.0 * PI));
-    up_down.setRPM(up_down_vel * 60.0 / (2.0 * PI));
-
-    long dx = command.dx.load();
-    long dy = command.dy.load();
-
-    //   Parameters
-    String complete = backlash_complete ? "true" : "false";
-    Serial.println("---------------");
-    Serial.println("Backlash complete? " + complete);
-    Serial.println("backlash dx: " + String(cur_command.backlash_command.dx));
-    Serial.println("backlash dy: " + String(cur_command.backlash_command.dy));
-    Serial.println("MAIN dx: " + String(cur_command.draw_command.dx));
-    Serial.println("MAIN dy: " + String(cur_command.draw_command.dy));
-    Serial.println("dx: " + String(dx));
-    Serial.println("dy: " + String(dy));
-    Serial.println("left_right_accel: " + String(left_right_accel));
-    Serial.println("up_down_accel: " + String(up_down_accel));
-    Serial.println("left_right_vel: " + String(left_right_vel));
-    Serial.println("up_down_vel: " + String(up_down_vel));
-    Serial.println("---------------");
-
-    //   if dx and dy are both zero, we don't need to move
-    command_complete = false;
-
-    // Only actually command the motion if we have a non-zero dx or dy
-    //   E
-    if (dx != 0 || dy != 0)
-    {
-      controller.startMove(dx, dy);
-    }
-  }
-
-  if (!controller.nextAction() && !command_complete)
-  {
-    if (!backlash_complete)
-    {
-      command_complete = true;
-      backlash_complete = true;
-      // Serial.println("Backlash complete");
-    }
-    else
-    {
-      command_complete = true;
-      backlash_complete = false;
-      cur_command.ready.store(false);
-      // Serial.println("Command complete");
-    }
-  }
-
-  return false;
+  return complete;
 }
