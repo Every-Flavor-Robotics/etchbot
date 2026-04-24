@@ -42,3 +42,7 @@ You will need to setup PlatformIO to flash the ESP32. You can install PlatformIO
 
 To flash the ESP32, navigate to the `etch-a-sketch-driver` directory in PlatformIO, switch to the stepper env, and upload the code. Note that you need to update the `ssid` and `password` and the IP address of the etch-a-sketch server in the `main.cpp` file.
 
+# Supporting Us
+* Subscribe to our [YouTube Channel](https://www.youtube.com/@EveryFlavorRobot)
+* Join our [Discord](https://discord.gg/exDWKb4kwd) if you have questions or just want to chat!
+* Consider supporting us on [Patreon](https://www.patreon.com/EveryFlavorRobot)
