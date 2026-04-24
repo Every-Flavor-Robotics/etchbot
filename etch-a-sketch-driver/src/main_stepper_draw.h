@@ -1,6 +1,4 @@
 #include <Arduino.h>
-#include <WebSocketsServer.h>
-#include <WiFi.h>
 #include <esp_system.h>
 #include <esp_task_wdt.h>
 
@@ -9,10 +7,9 @@
 #include <vector>
 
 #include "FastAccelStepper.h"
-#include "HTTPClient.h"
 #include "gcode.h"
 #include "planner.h"
-#include "wifi_gcode_stream.h"
+#include "serial_gcode_stream.h"
 
 //  Conversion from mm to steps
 #define MICROSTEPS 16
@@ -98,7 +95,7 @@ void home()
 
 // GCode objects
 GCode::GCodeParser *parser;
-GCode::WifiGCodeStream *stream;
+GCode::SerialGCodeStream *stream;
 
 void draw_pre_setup() {}
 
@@ -128,7 +125,7 @@ void draw_setup()
         Serial.println("[ERROR] Could not attach Up/Down stepper");
     }
 
-    stream = new GCode::WifiGCodeStream(HOST, 50);
+    stream = new GCode::SerialGCodeStream(50);
     parser = new GCode::GCodeParser(stream, 2000);
     GCode::start_parser(*parser);
 

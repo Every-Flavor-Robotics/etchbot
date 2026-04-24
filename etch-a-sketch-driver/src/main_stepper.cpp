@@ -1,163 +1,148 @@
 #include <Arduino.h>
-#include <WiFiClientSecure.h>
 
-#include "Arduino_JSON.h"
-#include "HTTPClient.h"
 #include "main_stepper_draw.h"
 #include "main_stepper_erase.h"
-String name = "Etchbot-Stepper";
+
+String robot_name = "Etchbot-Stepper";
 
 unsigned long start_time = 0;
 
-String server_address = "http://192.168.10.15";
-int server_port = 5010;
-
-HTTPClient http;
-
 enum COMMAND
 {
-  WAIT,
-  ERASE,
-  DRAW
+    WAIT,
+    ERASE,
+    DRAW
 };
 
 // Create pointer to function to call in loop, might be draw or erase
 bool (*loop_function)() = NULL;
 
 COMMAND command = WAIT;
+
+// Read a line from Serial, blocking until newline received
+String serial_read_line()
+{
+    String line = "";
+    while (true)
+    {
+        if (Serial.available() > 0)
+        {
+            char c = Serial.read();
+            if (c == '\n')
+            {
+                line.trim();
+                return line;
+            }
+            if (c != '\r')
+            {
+                line += c;
+            }
+        }
+        else
+        {
+            delay(10);
+        }
+    }
+}
+
 void setup()
 {
-  // Configure onboard button as input
-  pinMode(0, INPUT_PULLUP);
+    // Configure onboard button as input
+    pinMode(0, INPUT_PULLUP);
 
-  Serial.begin(5000000);
-
-  //   Connect to wifi
-  //   Switch to station mode
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(500);
-    Serial.println("Connecting to WiFi..");
-  }
-
-  erase_pre_setup();
-  draw_pre_setup();
-
-  int return_code = 0;
-  String address = server_address + ":" + server_port + "/connect";
-  String body = "{\"name\": \"" + name + "\", \"ip\": \" " +
-                WiFi.localIP().toString() + "\"}";
-
-  Serial.println("Connecting to server");
-  while (return_code != 200)
-  {
-    http.begin(address.c_str());
-    http.addHeader("Content-Type", "application/json");
-    return_code = http.POST(body);
-    http.end();
-
-    Serial.println("Server response: " + String(return_code));
-  }
-
-  // Call GET on /command to decide if we should erase or draw
-  //   Query parameters: name
-
-  while (command == WAIT)
-  {
-    address = server_address + ":" + server_port + "/command" + "?name=" + name;
-    http.begin(address.c_str());
-    http.addHeader("Content-Type", "application/json");
-    //   call GET and retrieve JSON response
-    return_code = http.GET();
-
-    Serial.println("/command server response: " + String(return_code));
-
-    if (return_code == 200)
+    Serial.begin(115200);
+    while (!Serial)
     {
-      // Parse JSON response
-      // JSON expected:
-      // {
-      //   "command": "erase",
-      // }
-
-      JSONVar response = JSON.parse(http.getString());
-      String command_str = (const char*)response["command"];
-
-      Serial.println("Command: " + command_str);
-      if (command_str == "erase")
-      {
-        command = ERASE;
-      }
-      else if (command_str == "draw")
-      {
-        command = DRAW;
-      }
-      else
-      {
-        command = WAIT;
-      }
+        delay(50);
     }
 
-    http.end();
-
+    // Small delay to let USB CDC settle
     delay(1000);
-  }
 
-  start_time = micros();
-  if (command == ERASE)
-  {
-    erase_setup();
-    loop_function = erase_loop;
-  }
-  else if (command == DRAW)
-  {
-    draw_setup();
-    loop_function = draw_loop;
-  }
+    erase_pre_setup();
+    draw_pre_setup();
+
+    // Send HELLO and wait for COMMAND response
+    Serial.println("Connecting to server via Serial...");
+
+    while (command == WAIT)
+    {
+        Serial.println("HELLO:" + robot_name);
+
+        // Wait for response with timeout
+        unsigned long send_time = millis();
+        while (!Serial.available())
+        {
+            if (millis() - send_time > 3000)
+            {
+                break;  // Timeout, will resend HELLO
+            }
+            delay(10);
+        }
+
+        if (Serial.available())
+        {
+            String response = serial_read_line();
+            Serial.println("Received: " + response);
+
+            if (response.startsWith("COMMAND:"))
+            {
+                String command_str = response.substring(8);
+                command_str.trim();
+
+                if (command_str == "draw")
+                {
+                    command = DRAW;
+                }
+                else if (command_str == "erase")
+                {
+                    command = ERASE;
+                }
+                // else stays WAIT, will retry
+            }
+        }
+
+        if (command == WAIT)
+        {
+            delay(1000);
+        }
+    }
+
+    Serial.println("Command received: " + String(command == DRAW ? "draw" : "erase"));
+
+    start_time = micros();
+    if (command == ERASE)
+    {
+        erase_setup();
+        loop_function = erase_loop;
+    }
+    else if (command == DRAW)
+    {
+        draw_setup();
+        loop_function = draw_loop;
+    }
 }
 
 void loop()
 {
-  if (loop_function())
-  {
-    Serial.println("Complete");
-    unsigned long completion_time = micros() - start_time;
-    float completion_time_seconds = completion_time / 1000000.0;
-
-    // We are complete now, send a complete message to the server
-    String address = server_address + ":" + server_port;
-    String body;
-
-    if (command == DRAW)
+    if (loop_function())
     {
-      address += "/drawing_complete";
+        Serial.println("Complete");
+        unsigned long completion_time = micros() - start_time;
+        float completion_time_seconds = completion_time / 1000000.0;
 
-      body = "{\"name\": \"" + name +
-             "\", \"drawing_time\": " + String(completion_time_seconds) + "}";
+        // Send completion message over serial
+        if (command == DRAW)
+        {
+            Serial.println("DONE:draw:" + String(completion_time_seconds));
+        }
+        else if (command == ERASE)
+        {
+            Serial.println("DONE:erase:" + String(completion_time_seconds));
+        }
+
+        // Wait a moment for the message to be sent, then restart
+        delay(1000);
+        esp_restart();
     }
-    else if (command == ERASE)
-    {
-      address += "/erasing_complete";
-
-      body = "{\"name\": \"" + name +
-             "\", \"erasing_time\": " + String(completion_time_seconds) + "}";
-    }
-
-    int return_code = 0;
-    while (return_code != 200)
-    {
-      http.begin(address.c_str());
-      http.addHeader("Content-Type", "application/json");
-      return_code = http.POST(body);
-      http.end();
-
-      Serial.println("Server response: " + String(return_code));
-    }
-
-    // Reset the ESP32
-    esp_restart();
-  }
 }

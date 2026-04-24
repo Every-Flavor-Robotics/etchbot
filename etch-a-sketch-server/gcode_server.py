@@ -400,14 +400,99 @@ def gcode_available():
         return f"Error: {e}", 500
 
 
-def start_gcode_server(host="0.0.0.0", port=5005):
-    # Print in green, starting the GCode server
-    secho("GCode Streamer: Starting up", fg="green")
-    print("\tGCode Streamer: Host:", host)
-    print("\tGCode Streamer: Port:", port)
-    with socketserver.TCPServer((host, port), GCodeRequestHandler) as server:
-        secho("GCode Streamer: Server listening...", fg="green")
-        server.serve_forever()
+def start_serial_manager(bridge_url="ws://host.docker.internal:9876"):
+    """Connect to the WebSocket-to-Serial bridge and manage ESP32 communication."""
+    import asyncio
+    import websockets
+
+    secho("Serial Manager: Starting up", fg="green")
+    secho(f"Serial Manager: Bridge URL: {bridge_url}", fg="green")
+
+    async def serial_session():
+        while True:
+            try:
+                async with websockets.connect(bridge_url) as ws:
+                    secho("Serial Manager: Connected to bridge", fg="green")
+                    
+                    # Wait for HELLO from ESP32
+                    while True:
+                        message = await ws.recv()
+                        message = message.strip()
+                        
+                        if message.startswith("HELLO:"):
+                            robot_name = message.split(":", 1)[1].strip()
+                            secho(f"Serial Manager: Robot connected: {robot_name}", fg="green")
+                            
+                            # Register or update the robot in the store
+                            etchbot = etchbot_store.get_robot_by_name(robot_name)
+                            if etchbot is None:
+                                from etchbot import EtchBot
+                                etchbot = EtchBot("serial", robot_name)
+                                etchbot_store.add_robot(etchbot)
+                            
+                            # Handle connect (triggers state machine transition)
+                            etchbot.handle_connect_request()
+                            
+                            # Get command from state machine
+                            cmd = etchbot.get_command()
+                            if cmd and cmd != "invalid":
+                                await ws.send(f"COMMAND:{cmd}\n")
+                                secho(f"Serial Manager: Sent COMMAND:{cmd}", fg="green")
+                            else:
+                                await ws.send("COMMAND:wait\n")
+                                secho("Serial Manager: No command ready, sent COMMAND:wait", fg="yellow")
+                                continue
+                            
+                            # If drawing, stream GCode
+                            if cmd == "draw":
+                                gcode = etchbot.next_gcode()
+                                if gcode is None:
+                                    gcode = EmptyGCode()
+                                
+                                # Signal GCode is coming
+                                await ws.send("GCODE_READY\n")
+                                
+                                # Load and stream all lines
+                                if not gcode.loaded:
+                                    gcode.load()
+                                
+                                for line in gcode.gcode_lines:
+                                    await ws.send(line.strip() + "\n")
+                                    # Small yield to prevent overwhelming the serial buffer
+                                    await asyncio.sleep(0.001)
+                                
+                                secho(f"Serial Manager: Streamed {len(gcode.gcode_lines)} GCode lines", fg="green")
+                            
+                            # Wait for DONE from ESP32
+                            while True:
+                                message = await ws.recv()
+                                message = message.strip()
+                                
+                                if message.startswith("DONE:"):
+                                    parts = message.split(":")
+                                    done_cmd = parts[1] if len(parts) > 1 else ""
+                                    done_time = float(parts[2]) if len(parts) > 2 else 0
+                                    
+                                    if done_cmd == "draw":
+                                        etchbot.drawing_complete(drawing_time=done_time)
+                                        secho(f"Serial Manager: Drawing complete in {done_time:.1f}s", fg="green")
+                                    elif done_cmd == "erase":
+                                        etchbot.erasing_complete()
+                                        secho(f"Serial Manager: Erasing complete", fg="green")
+                                    break
+                                elif message.startswith("HELLO:"):
+                                    # Robot restarted mid-session, handle reconnect
+                                    secho("Serial Manager: Robot restarted, reconnecting...", fg="yellow")
+                                    break
+                            
+            except Exception as e:
+                secho(f"Serial Manager: Connection error: {e}", fg="red")
+                secho("Serial Manager: Reconnecting in 3s...", fg="yellow")
+                import traceback
+                traceback.print_exc()
+                await asyncio.sleep(3)
+
+    asyncio.run(serial_session())
 
 
 _pipelines: dict = {}
@@ -422,7 +507,7 @@ def run_gcode_server(scan_directory, run_flask=True):
     secho("All pipelines ready.", fg="green")
 
     threading.Thread(target=get_new_gcode, args=(scan_directory,)).start()
-    threading.Thread(target=start_gcode_server).start()
+    threading.Thread(target=start_serial_manager).start()
 
     if run_flask:
         app = Flask(__name__)
