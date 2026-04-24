@@ -430,6 +430,11 @@ def start_serial_manager(bridge_url="ws://host.docker.internal:9876"):
                                 etchbot = EtchBot("serial", robot_name)
                                 etchbot_store.add_robot(etchbot)
                             
+                            # Create upload directory (mirrors /connect endpoint)
+                            from pathlib import Path
+                            upload_dir = Path("uploads") / robot_name
+                            upload_dir.mkdir(parents=True, exist_ok=True)
+                            
                             # Handle connect (triggers state machine transition)
                             etchbot.handle_connect_request()
                             
