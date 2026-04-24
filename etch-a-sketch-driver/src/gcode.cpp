@@ -224,6 +224,7 @@ float GCode::GCodeParser::get_rapid_feedrate() { return rapid_feedrate; }
 
 void GCode::parser_thread(GCode::GCodeParser& parser)
 {
+  esp_task_wdt_add(NULL);  // Register this task with the watchdog
   while (!parser.is_stream_complete())
   {
     if (parser.get_command_buffer_size() < parser.buffer_size)

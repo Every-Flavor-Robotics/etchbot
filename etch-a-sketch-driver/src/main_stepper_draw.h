@@ -135,6 +135,7 @@ void draw_setup()
 
 void motor_task(void *pvParameters)
 {
+    esp_task_wdt_add(NULL);  // Register this task with the watchdog
     while (true)
     {
         if (enable_flag)
