@@ -12,6 +12,8 @@ server:
 drawing:
   video_generation:
     frame_rate: 8
+  preprocessing:
+    batch_size: 8
   # Options are "potrace" or "vtracer"
   pipeline: "vtracer"
   width: 125
