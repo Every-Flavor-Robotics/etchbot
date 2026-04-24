@@ -31,6 +31,10 @@ class Preprocessor(ABC):
         if not isinstance(self.PARALLELIZABLE, bool):
             raise ValueError("PARALLELIZABLE must be a boolean.")
 
+    def initialize(self, config: dict) -> None:
+        """Called once at server startup. Override to load models or sessions."""
+        pass
+
     def process(self, input_path: Path, output_dir: Path, output_name: str) -> Path:
         """Process the input image and return the output image.
 

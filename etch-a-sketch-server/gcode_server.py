@@ -10,7 +10,7 @@ from flask import Flask, Blueprint, jsonify, request
 import re
 from filelock import FileLock, Timeout
 from click import secho
-from etch_a_sketch_cli import run_pipeline, SUPPORTED_FILE_TYPES
+from etch_a_sketch_cli import run_pipeline, build_pipeline, Pipeline, SUPPORTED_FILE_TYPES
 from pathlib import Path
 import shutil
 from etchbot import EtchBotStore
@@ -127,13 +127,14 @@ class EmptyGCode(GCode):
 class Drawing:
     ARTIFACTS_DIR = Path("artifacts")
 
-    def __init__(self, name: str, path: pathlib.Path, pipeline=None, framerate=None):
+    def __init__(self, name: str, path: pathlib.Path, pipeline=None, framerate=None, built_pipeline: Pipeline = None):
         self.name = name
 
         self.path = path
 
         self.pipeline = pipeline
         self.framerate = framerate
+        self.built_pipeline = built_pipeline
 
         # Confirm that the file exists
         if not self.path.exists():
@@ -163,13 +164,14 @@ class Drawing:
             output = None
             file_extension = self.path.suffix.lower()
             if file_extension in SUPPORTED_FILE_TYPES:
-                processing_dir = PROCESSING_DIR / self.path.stem
+                processing_dir = PROCESSING_DIR / self.name
                 output = run_pipeline(
                     self.path,
                     processing_dir,
                     copy=False,
                     pipeline=self.pipeline,
                     framerate=self.framerate,
+                    built_pipeline=self.built_pipeline,
                 )
 
         # Do nothing if file type is not supported
@@ -408,7 +410,17 @@ def start_gcode_server(host="0.0.0.0", port=5005):
         server.serve_forever()
 
 
+_pipelines: dict = {}
+
+
 def run_gcode_server(scan_directory, run_flask=True):
+    global _pipelines
+    config = {"drawing.preprocessing.batch_size": Config().get("drawing.preprocessing.batch_size", 8)}
+    for name in ("vtracer", "potrace"):
+        secho(f"Building pipeline '{name}' and loading models...", fg="yellow")
+        _pipelines[name] = build_pipeline(pipeline_name=name, config=config)
+    secho("All pipelines ready.", fg="green")
+
     threading.Thread(target=get_new_gcode, args=(scan_directory,)).start()
     threading.Thread(target=start_gcode_server).start()
 

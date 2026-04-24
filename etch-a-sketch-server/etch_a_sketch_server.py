@@ -7,6 +7,7 @@ from datetime import datetime
 import threading
 import time
 import shutil
+import gcode_server
 from gcode_server import (
     gcode_blueprint,
     run_gcode_server,
@@ -64,7 +65,8 @@ def upload_file(etchbot_name):
 
         file_name = file.filename.split(".")[0]
         # Create a drawing and hand off to the Etchbot
-        drawing = Drawing(file_name, save_path, pipeline=pipeline, framerate=framerate)
+        built_pipeline = gcode_server._pipelines.get(pipeline) or gcode_server._pipelines.get("vtracer")
+        drawing = Drawing(file_name, save_path, pipeline=pipeline, framerate=framerate, built_pipeline=built_pipeline)
         etchbot.add_drawing(drawing)
 
         # Start file processing or any other logic related to the specific etchbot
@@ -218,6 +220,71 @@ def download_artifact(etchbot_name):
     except Exception as e:
         print(f"Error downloading artifact: {e}")
         return jsonify({"error": "Failed to download artifact"}), 500
+
+
+import re as _re
+
+
+def _step_sort_key(path):
+    m = _re.search(r"^step_(\d+)_", path.name)
+    return int(m.group(1)) if m else float("inf")
+
+
+def _find_processing_dir(drawing_stem: str):
+    """Return processing dir for drawing_stem, handling legacy timestamp-prefixed dirs."""
+    exact = gcode_server.PROCESSING_DIR / drawing_stem
+    if exact.exists():
+        return exact
+    # Fallback: find a directory whose name ends with _{drawing_stem}
+    suffix = f"_{drawing_stem}"
+    for d in sorted(gcode_server.PROCESSING_DIR.iterdir()):
+        if d.is_dir() and d.name.endswith(suffix):
+            return d
+    return None
+
+
+@app.route("/etchbot/<etchbot_name>/drawing/<drawing_stem>/steps", methods=["GET"])
+def get_drawing_steps(etchbot_name, drawing_stem):
+    processing_path = _find_processing_dir(drawing_stem)
+    if processing_path is None:
+        return jsonify({"error": "Drawing not found"}), 404
+
+    steps = []
+    for f in sorted(processing_path.iterdir(), key=_step_sort_key):
+        if f.name.startswith("step_") and f.is_file():
+            steps.append({"filename": f.name, "ext": f.suffix.lower()})
+
+    return jsonify({"steps": steps})
+
+
+@app.route("/etchbot/<etchbot_name>/drawing/<drawing_stem>/step_image/<filename>", methods=["GET"])
+def get_step_image(etchbot_name, drawing_stem, filename):
+    found = _find_processing_dir(drawing_stem)
+    if found is None:
+        return jsonify({"error": "Drawing not found"}), 404
+    processing_path = found.resolve()
+    file_path = (processing_path / filename).resolve()
+
+    if not str(file_path).startswith(str(processing_path)):
+        return jsonify({"error": "Invalid path"}), 400
+
+    if not file_path.exists():
+        return jsonify({"error": "File not found"}), 404
+
+    return send_file(file_path)
+
+
+@app.route("/etchbot/<etchbot_name>/queue/<int:index>", methods=["DELETE"])
+def delete_queue_item(etchbot_name, index):
+    try:
+        if etchbot_name not in etchbot_store:
+            return jsonify({"error": f"EtchBot {etchbot_name} not found"}), 404
+        etchbot = etchbot_store.get_robot_by_name(etchbot_name)
+        if not etchbot.remove_drawing_from_queue(index):
+            return jsonify({"error": "Cannot remove item: out of range or currently drawing"}), 400
+        return jsonify({"message": "Drawing removed from queue"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/etchbot/<etchbot_name>/connect_camera", methods=["POST"])

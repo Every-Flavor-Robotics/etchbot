@@ -167,6 +167,16 @@ class EtchBot:
         # Start processing for the drawing
         drawing.start_processing()
 
+    def remove_drawing_from_queue(self, index: int) -> bool:
+        """Remove a drawing from the queue by index.
+        Returns False if index out of range or drawing is currently being drawn."""
+        if index < 0 or index >= len(self.queue):
+            return False
+        if index == 0 and self.state == "DRAWING":
+            return False
+        self.queue.pop(index)
+        return True
+
     def update_ip(self, ip: str):
         self.ip = ip
 

@@ -35,6 +35,113 @@ from gcode_filters import (
     GCodeFilter,
     StartAtOrigin,
 )
+from dataclasses import dataclass
+
+
+@dataclass
+class Pipeline:
+    video_splitters: list
+    preprocessors: list
+    vectorizers: list
+    gcode_converters: list
+    gcode_filters: list
+
+
+def build_pipeline(pipeline_name: str = None, config: dict = None) -> Pipeline:
+    if config is None:
+        config = {}
+
+    if pipeline_name is None:
+        pipeline_name = Config().get("drawing.pipeline", "potrace")
+
+    if pipeline_name == "potrace":
+        video_splitters = [FFmpegSplitter(Config().get("drawing.video_generation.frame_rate", None))]
+        preprocessors = [
+            RemBGPreprocessor(),
+            AspectRatioPreprocessor(16 / 11),
+            InformativeDrawingsPreprocessor(),
+            BlackAndWhitePreprocessor(),
+        ]
+        vectorizers = [PotraceVectorizer()]
+        gcode_converters = [
+            Svg2GcodeGenerator(
+                feed_rate=Config().get("drawing.feed_rate", None),
+                output_width=Config().get("drawing.width", None),
+                output_height=Config().get("drawing.height", None),
+                origin=(
+                    Config().get("drawing.origin_x", 0.0),
+                    Config().get("drawing.origin_y", 0.0),
+                ),
+            ),
+        ]
+        gcode_filters = [
+            GCodeCleaner(),
+            RemoveZ(),
+            ResolutionReducer(0.2),
+            ColinearFilter(0.998),
+            TSPOptimizer(
+                (
+                    Config().get("drawing.origin_x", 0.0),
+                    Config().get("drawing.origin_y", 0.0),
+                )
+            ),
+            StartAtOrigin(
+                (
+                    Config().get("drawing.origin_x", 0.0),
+                    Config().get("drawing.origin_y", 0.0),
+                )
+            ),
+        ]
+    elif pipeline_name == "vtracer":
+        video_splitters = [FFmpegSplitter(Config().get("drawing.video_generation.frame_rate", None))]
+        preprocessors = [
+            AspectRatioPreprocessor(16 / 11),
+        ]
+        vectorizers = [VTracerVectorizer()]
+        gcode_converters = [
+            Svg2GcodeGenerator(
+                feed_rate=Config().get("drawing.feed_rate", None),
+                output_width=Config().get("drawing.width", None),
+                output_height=Config().get("drawing.height", None),
+                origin=(
+                    Config().get("drawing.origin_x", 0.0),
+                    Config().get("drawing.origin_y", 0.0),
+                ),
+            ),
+        ]
+        gcode_filters = [
+            GCodeCleaner(),
+            RemoveZ(),
+            ResolutionReducer(0.2),
+            ColinearFilter(0.998),
+            TSPOptimizer(
+                (
+                    Config().get("drawing.origin_x", 0.0),
+                    Config().get("drawing.origin_y", 0.0),
+                )
+            ),
+            StartAtOrigin(
+                (
+                    Config().get("drawing.origin_x", 0.0),
+                    Config().get("drawing.origin_y", 0.0),
+                )
+            ),
+        ]
+    else:
+        raise ValueError(f"Invalid pipeline: {pipeline_name}")
+
+    all_elements = [*video_splitters, *preprocessors, *vectorizers, *gcode_converters, *gcode_filters]
+    for element in all_elements:
+        element.initialize(config)
+
+    return Pipeline(
+        video_splitters=video_splitters,
+        preprocessors=preprocessors,
+        vectorizers=vectorizers,
+        gcode_converters=gcode_converters,
+        gcode_filters=gcode_filters,
+    )
+
 
 counter = 0
 
@@ -74,9 +181,10 @@ def run_pipeline(
     skip_preprocessing: bool = False,
     framerate: int = None,  # Override the framerate in the config file
     pipeline: str = "potrace",  # Override the pipeline in the config file
+    built_pipeline: "Pipeline" = None,
 ):
     global counter
-    # Print in green, processing the input file
+    counter = 0  # Reset per pipeline run so step files are numbered from 0
     click.secho(f"Processing {input_file}...", fg="green")
 
     # Confirm the output directory exists
@@ -89,84 +197,16 @@ def run_pipeline(
     if framerate is None:
         framerate = Config().get("drawing.video_generation.frame_rate", None)
 
-    if pipeline == "potrace":
-        video_splitters = [FFmpegSplitter(framerate)]
-
-        preprocessors = [
-            RemBGPreprocessor(),
-            AspectRatioPreprocessor(16 / 11),
-            InformativeDrawingsPreprocessor(),
-            BlackAndWhitePreprocessor(),
-        ]
-        vectorizers = [PotraceVectorizer()]
-        gcode_converters = [
-            Svg2GcodeGenerator(
-                feed_rate=Config().get("drawing.feed_rate", None),
-                output_width=Config().get("drawing.width", None),
-                output_height=Config().get("drawing.height", None),
-                origin=(
-                    Config().get("drawing.origin_x", 0.0),
-                    Config().get("drawing.origin_y", 0.0),
-                ),
-            ),
-        ]
-        gcode_filters = [
-            GCodeCleaner(),
-            RemoveZ(),
-            ResolutionReducer(0.2),
-            ColinearFilter(0.998),
-            TSPOptimizer(
-                (
-                    Config().get("drawing.origin_x", 0.0),
-                    Config().get("drawing.origin_y", 0.0),
-                )
-            ),
-            StartAtOrigin(
-                (
-                    Config().get("drawing.origin_x", 0.0),
-                    Config().get("drawing.origin_y", 0.0),
-                )
-            ),
-        ]
-    elif pipeline == "vtracer":
-
-        video_splitters = [FFmpegSplitter(framerate)]
-
-        preprocessors = [
-            AspectRatioPreprocessor(16 / 11),
-        ]
-        vectorizers = [VTracerVectorizer()]
-        gcode_converters = [
-            Svg2GcodeGenerator(
-                feed_rate=Config().get("drawing.feed_rate", None),
-                output_width=Config().get("drawing.width", None),
-                output_height=Config().get("drawing.height", None),
-                origin=(
-                    Config().get("drawing.origin_x", 0.0),
-                    Config().get("drawing.origin_y", 0.0),
-                ),
-            ),
-        ]
-        gcode_filters = [
-            GCodeCleaner(),
-            RemoveZ(),
-            ResolutionReducer(0.2),
-            ColinearFilter(0.998),
-            TSPOptimizer(
-                (
-                    Config().get("drawing.origin_x", 0.0),
-                    Config().get("drawing.origin_y", 0.0),
-                )
-            ),
-            StartAtOrigin(
-                (
-                    Config().get("drawing.origin_x", 0.0),
-                    Config().get("drawing.origin_y", 0.0),
-                )
-            ),
-        ]
+    if built_pipeline is not None:
+        p = built_pipeline
     else:
-        raise ValueError(f"Invalid pipeline: {pipeline}")
+        p = build_pipeline(pipeline_name=pipeline, config={})
+
+    video_splitters = p.video_splitters
+    preprocessors = p.preprocessors
+    vectorizers = p.vectorizers
+    gcode_converters = p.gcode_converters
+    gcode_filters = p.gcode_filters
 
     # Confirm that the input file exists
     if not input_file.exists():

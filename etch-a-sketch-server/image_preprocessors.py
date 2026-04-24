@@ -1,3 +1,4 @@
+import os
 import subprocess
 from pathlib import Path
 from click import secho
@@ -477,34 +478,23 @@ class BlackAndWhitePreprocessor(ImagePreprocessor):
 class RemBGPreprocessor(ImagePreprocessor):
     """RemBG Preprocessor removes the background from the input image."""
 
-    PATH_TO_BACKGROUND_REMOVER = "backgroundremover"
     PARALLELIZABLE = True
 
+    def initialize(self, config: dict) -> None:
+        import rembg
+        self._session = rembg.new_session("u2net")
+
     def _process(self, input_path: Path, output_path: Path) -> Path:
-        """Process the input image and return the output image.
-
-        Args:
-            input_path (Path): Path to the raw image to be processed
-            output_path (Path): Path to save the processed image
-
-        Returns: None
-        """
-
         super()._process(input_path, output_path)
 
-        # Confirm that the input image exists
         if not input_path.exists():
             raise FileNotFoundError(f"Image {input_path} not found.")
 
-        command = f"{self.PATH_TO_BACKGROUND_REMOVER} -i {input_path} -o {output_path}"
+        import rembg
+        input_bytes = input_path.read_bytes()
+        output_bytes = rembg.remove(input_bytes, session=self._session)
+        output_path.write_bytes(output_bytes)
 
-        # Run the command
-        try:
-            subprocess.run(command, check=True, shell=True)
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Preprocessor execution failed: {e}") from e
-
-        # Confirm that the output image exists
         if not output_path.exists():
             raise FileNotFoundError(
                 f"Output image {output_path} not generated correctly."
@@ -562,49 +552,66 @@ class CartoonifyPreProcessor(ImagePreprocessor):
 class InformativeDrawingsPreprocessor(ImagePreprocessor):
     """Informative Drawings Preprocessor generates informative drawings from the input image."""
 
-    PATH_TO_INFORMATIVE_DRAWINGS = "./modules/informative-drawings/run_etch.py"
-    PARALLELIZABLE = True
+    PARALLELIZABLE = False
+
+    def initialize(self, config: dict) -> None:
+        import argparse
+        import sys
+
+        informative_drawings_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "modules", "informative-drawings"
+        )
+        if informative_drawings_dir not in sys.path:
+            sys.path.insert(0, informative_drawings_dir)
+
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--name", type=str, default="anime_style")
+        parser.add_argument("--checkpoints_dir", type=str, default="checkpoints")
+        parser.add_argument("--input_path", type=str, default="")
+        parser.add_argument("--output_path", type=str, default="")
+        parser.add_argument("--geom_name", type=str, default="feats2Geom")
+        parser.add_argument("--batchSize", type=int, default=1)
+        parser.add_argument("--dataroot", type=str, default="")
+        parser.add_argument("--depthroot", type=str, default="")
+        parser.add_argument("--input_nc", type=int, default=3)
+        parser.add_argument("--output_nc", type=int, default=1)
+        parser.add_argument("--geom_nc", type=int, default=3)
+        parser.add_argument("--every_feat", type=int, default=1)
+        parser.add_argument("--num_classes", type=int, default=55)
+        parser.add_argument("--midas", type=int, default=0)
+        parser.add_argument("--ngf", type=int, default=64)
+        parser.add_argument("--n_blocks", type=int, default=3)
+        parser.add_argument("--size", type=int, default=256)
+        parser.add_argument("--cuda_device", type=int, default=0)
+        parser.add_argument("--n_cpu", type=int, default=8)
+        parser.add_argument("--which_epoch", type=str, default="latest")
+        parser.add_argument("--aspect_ratio", type=float, default=1.0)
+        parser.add_argument("--mode", type=str, default="test")
+        parser.add_argument("--load_size", type=int, default=256)
+        parser.add_argument("--crop_size", type=int, default=256)
+        parser.add_argument("--max_dataset_size", type=int, default=float("inf"))
+        parser.add_argument("--preprocess", type=str, default="resize_and_crop")
+        parser.add_argument("--no_flip", action="store_true", default=True)
+        parser.add_argument("--norm", type=str, default="instance")
+        parser.add_argument("--predict_depth", type=int, default=0)
+        parser.add_argument("--save_input", type=int, default=0)
+        parser.add_argument("--reconstruct", type=int, default=0)
+        parser.add_argument("--how_many", type=int, default=100)
+        opt = parser.parse_args([])
+        opt.no_flip = True
+
+        from informative_drawings_model import InformativeDrawingsModel
+        self._model = InformativeDrawingsModel(opt)
+        self._batch_size = config.get("drawing.preprocessing.batch_size", 8)
+
+    def _process_batch(self, input_dir: Path, output_dir: Path, output_name: str) -> Path:
+        out = output_dir / output_name
+        out.mkdir(parents=True, exist_ok=True)
+        self._model.infer(str(input_dir), str(out), self._batch_size)
+        return out
 
     def _process(self, input_path: Path, output_path: Path) -> Path:
-        """Process the input image and return the output image.
-
-        Args:
-            input_path (Path): Path to the raw image to be processed
-            output_path (Path): Path to save the processed image
-
-        Returns: None
-        """
-
         super()._process(input_path, output_path)
-
-        # Confirm that the input image exists
-        if not input_path.exists():
-            raise FileNotFoundError(f"Image {input_path} not found.")
-
-        args = (
-            f"--input_path {input_path} --output_path {output_path} --name anime_style"
-        )
-
-        # Construct the command to run the Informative Drawings preprocessor
-        command = f"python {self.PATH_TO_INFORMATIVE_DRAWINGS} {args}"
-
-        while True:
-            try:
-                with FileLock(output_path.with_suffix(".lock"), timeout=1):
-                    # Run the command
-                    try:
-                        subprocess.run(command, check=True, shell=True)
-                    except subprocess.CalledProcessError as e:
-                        raise RuntimeError(f"Preprocessor execution failed: {e}") from e
-
-                    # Confirm that the output image exists
-                    if not output_path.exists():
-                        raise FileNotFoundError(
-                            f"Output image {output_path} not generated correctly."
-                        )
-
-                    break
-            except:
-                pass
-
+        self._model.infer(str(input_path), str(output_path.parent), batch_size=1)
         return output_path
